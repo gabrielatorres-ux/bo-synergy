@@ -1,0 +1,13 @@
+# Node
+node_modules/
+.env
+*.log
+bo-synergy.db
+
+# Build
+dist/
+build/
+*.db
+
+# Mac
+.DS_Store

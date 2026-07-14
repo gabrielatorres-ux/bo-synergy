@@ -1,8 +1,12 @@
 const { Pool } = require('pg');
-require('dotenv').config();
 
+// Leer variables de entorno directamente
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  host: process.env.PGHOST || 'db.gbdanalmsrsuellsaany.supabase.co',
+  port: parseInt(process.env.PGPORT || '5432'),
+  database: process.env.PGDATABASE || 'postgres',
+  user: process.env.PGUSER || 'postgres',
+  password: process.env.PGPASSWORD || 'BoSynergy2024!',
   ssl: {
     rejectUnauthorized: false
   }

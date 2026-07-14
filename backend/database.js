@@ -1,4 +1,8 @@
 const { Pool } = require('pg');
+const dns = require('dns');
+
+// Forzar resolución de DNS a IPv4
+dns.setDefaultResultOrder('ipv4first');
 
 // Leer variables de entorno directamente
 const pool = new Pool({
@@ -9,7 +13,9 @@ const pool = new Pool({
   password: process.env.PGPASSWORD || 'BoSynergy2024!',
   ssl: {
     rejectUnauthorized: false
-  }
+  },
+  // Forzar conexión a través de IPv4
+  family: 4
 });
 
 const query = (text, params) => pool.query(text, params);

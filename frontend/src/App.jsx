@@ -66,7 +66,7 @@ function App() {
   const [examenesPaciente, setExamenesPaciente] = useState([]);
   const [mensajeExamen, setMensajeExamen] = useState('');
 
-  const API_URL = 'http://localhost:3000/api';
+  const API_URL = 'https://bo-synergy-backend.onrender.com/api';
 
   // ===== FUNCIONES DE LOGIN =====
   const handleLogin = async (e) => {

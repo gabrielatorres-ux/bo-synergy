@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const db = require('./database');
+const { dbAll, dbGet, dbRun } = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 10000;

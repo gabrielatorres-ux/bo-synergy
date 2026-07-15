@@ -551,6 +551,93 @@ app.post('/api/enviar-incapacidad', async (req, res) => {
   }
 });
 
+// ==================== RUTAS DE ESTADÍSTICAS ====================
+
+app.get('/api/estadisticas', (req, res) => {
+  try {
+    const totalPacientes = dbGet('SELECT COUNT(*) as total FROM pacientes');
+    const totalConsultas = dbGet('SELECT COUNT(*) as total FROM consultas');
+    const totalEMI = dbGet('SELECT COUNT(*) as total FROM emi');
+    const totalEMP = dbGet('SELECT COUNT(*) as total FROM emp');
+    const totalEMR = dbGet('SELECT COUNT(*) as total FROM emr');
+    const totalVulnerabilidad = dbGet('SELECT COUNT(*) as total FROM vulnerabilidad');
+
+    res.json({
+      totalPacientes: totalPacientes.total || 0,
+      totalConsultas: totalConsultas.total || 0,
+      totalEMI: totalEMI.total || 0,
+      totalEMP: totalEMP.total || 0,
+      totalEMR: totalEMR.total || 0,
+      totalVulnerabilidad: totalVulnerabilidad.total || 0,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/top-motivos', (req, res) => {
+  try {
+    const rows = dbAll(`
+      SELECT motivo, COUNT(*) as count 
+      FROM consultas 
+      WHERE motivo IS NOT NULL AND motivo != ''
+      GROUP BY motivo 
+      ORDER BY count DESC 
+      LIMIT 5
+    `);
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/top-areas', (req, res) => {
+  try {
+    const rows = dbAll(`
+      SELECT p.area, COUNT(c.id) as count 
+      FROM consultas c
+      JOIN pacientes p ON c.paciente_id = p.id
+      WHERE p.area IS NOT NULL AND p.area != ''
+      GROUP BY p.area 
+      ORDER BY count DESC 
+      LIMIT 5
+    `);
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/consultas-por-mes', (req, res) => {
+  try {
+    const rows = dbAll(`
+      SELECT strftime('%Y-%m', fecha) as mes, COUNT(*) as count
+      FROM consultas
+      GROUP BY mes
+      ORDER BY mes DESC
+      LIMIT 12
+    `);
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/pacientes-por-area', (req, res) => {
+  try {
+    const rows = dbAll(`
+      SELECT area, COUNT(*) as count 
+      FROM pacientes 
+      WHERE area IS NOT NULL AND area != ''
+      GROUP BY area 
+      ORDER BY count DESC
+    `);
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== INICIAR SERVIDOR ====================
 
 app.listen(PORT, () => {

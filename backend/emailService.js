@@ -1,5 +1,7 @@
 const nodemailer = require('nodemailer');
 require('dotenv').config();
+
+// Verificar que las variables de entorno están configuradas
 console.log('📧 EMAIL_USER:', process.env.EMAIL_USER);
 console.log('📧 EMAIL_PASS:', process.env.EMAIL_PASS ? '✅ Configurada' : '❌ No configurada');
 

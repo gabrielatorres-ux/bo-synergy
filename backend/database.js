@@ -10,11 +10,12 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // Función para ejecutar consultas usando la API REST de Supabase
 const query = async (table, select = '*', filters = {}) => {
   try {
-    let query = supabase.from(table).select(select);
+    console.log('📝 Consultando tabla:', table);
+    let queryBuilder = supabase.from(table).select(select);
     Object.keys(filters).forEach(key => {
-      query = query.eq(key, filters[key]);
+      queryBuilder = queryBuilder.eq(key, filters[key]);
     });
-    const { data, error } = await query;
+    const { data, error } = await queryBuilder;
     if (error) throw error;
     return { rows: data || [] };
   } catch (error) {
@@ -32,6 +33,7 @@ const queryOne = async (table, select = '*', filters = {}) => {
 // Función para ejecutar INSERT, UPDATE, DELETE
 const queryRun = async (table, data, operation = 'insert') => {
   try {
+    console.log('📝 Ejecutando operación:', operation, 'en tabla:', table);
     let result;
     if (operation === 'insert') {
       result = await supabase.from(table).insert(data);
@@ -52,7 +54,7 @@ const queryRun = async (table, data, operation = 'insert') => {
 const testConnection = async () => {
   try {
     console.log('🔍 Probando conexión a Supabase...');
-    const { data, error } = await supabase.from('pacientes').select('count(*)', { count: 'exact', head: true });
+    const { data, error } = await supabase.from('pacientes').select('*', { count: 'exact', head: true });
     if (error) {
       console.error('❌ Error en testConnection:', error);
       return false;

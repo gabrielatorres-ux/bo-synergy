@@ -7,15 +7,15 @@ const supabaseKey = 'sb_publishable_HS3De2l_VwTKAF9otZSVXA_nGHmXRyU';
 // Crear cliente de Supabase
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Función para ejecutar consultas (adaptador para mantener compatibilidad)
-const query = async (text, params = []) => {
+// Función para ejecutar consultas usando la API REST de Supabase
+const query = async (table, select = '*', filters = {}) => {
   try {
-    console.log('📝 Ejecutando consulta:', text);
-    const { data, error } = await supabase.rpc('exec_sql', { sql: text, params: params });
-    if (error) {
-      console.error('❌ Error en Supabase RPC:', error);
-      throw error;
-    }
+    let query = supabase.from(table).select(select);
+    Object.keys(filters).forEach(key => {
+      query = query.eq(key, filters[key]);
+    });
+    const { data, error } = await query;
+    if (error) throw error;
     return { rows: data || [] };
   } catch (error) {
     console.error('❌ Error en query:', error);
@@ -23,14 +23,29 @@ const query = async (text, params = []) => {
   }
 };
 
-const queryOne = async (text, params = []) => {
-  const result = await query(text, params);
+// Función para obtener un solo resultado
+const queryOne = async (table, select = '*', filters = {}) => {
+  const result = await query(table, select, filters);
   return result.rows[0] || null;
 };
 
-const queryRun = async (text, params = []) => {
-  const result = await query(text, params);
-  return result;
+// Función para ejecutar INSERT, UPDATE, DELETE
+const queryRun = async (table, data, operation = 'insert') => {
+  try {
+    let result;
+    if (operation === 'insert') {
+      result = await supabase.from(table).insert(data);
+    } else if (operation === 'update') {
+      result = await supabase.from(table).update(data);
+    } else if (operation === 'delete') {
+      result = await supabase.from(table).delete();
+    }
+    if (result.error) throw result.error;
+    return result;
+  } catch (error) {
+    console.error('❌ Error en queryRun:', error);
+    throw error;
+  }
 };
 
 // Función de prueba de conexión

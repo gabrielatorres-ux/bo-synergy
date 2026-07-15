@@ -1,12 +1,8 @@
 const { Pool } = require('pg');
-const dns = require('dns');
 
-// Forzar resolución de DNS a IPv4
-dns.setDefaultResultOrder('ipv4first');
-
-// Usar la IP de Supabase directamente (IPv4)
+// Usar la IP de Supabase obtenida con nslookup
 const pool = new Pool({
-  host: '104.18.38.10',  // IP de Supabase (IPv4)
+  host: '104.18.38.10',  // Reemplaza con la IP que obtuviste
   port: 5432,
   database: 'postgres',
   user: 'postgres',
@@ -14,9 +10,10 @@ const pool = new Pool({
   ssl: {
     rejectUnauthorized: false
   },
-  // Forzar IPv4
-  family: 4,
-  connectionTimeoutMillis: 10000,
+  // Timeout de conexión más largo
+  connectionTimeoutMillis: 30000,
+  // Mantener conexión activa
+  keepAlive: true,
 });
 
 const query = (text, params) => pool.query(text, params);

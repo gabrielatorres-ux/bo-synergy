@@ -1,12 +1,10 @@
 const { Pool } = require('pg');
 
-// Usar DATABASE_URL para la conexión
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
     rejectUnauthorized: false
   },
-  // Timeout de conexión
   connectionTimeoutMillis: 10000,
 });
 

@@ -7,6 +7,16 @@ import * as XLSX from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
 import './App.css';
 
+// ===== FUNCIÓN HELPER PARA MANEJAR MEDICAMENTOS DE FORMA SEGURA =====
+const obtenerMedicamentosArray = (medicamentos) => {
+  if (!medicamentos) return ['No se recetaron medicamentos'];
+  if (Array.isArray(medicamentos)) return medicamentos;
+  if (typeof medicamentos === 'string') {
+    return medicamentos.split(',').map(m => m.trim()).filter(m => m);
+  }
+  return ['No se recetaron medicamentos'];
+};
+
 function App() {
   const [usuario, setUsuario] = useState(null);
   const [numEmpleado, setNumEmpleado] = useState('');
@@ -620,10 +630,8 @@ function App() {
     doc.text('Medicamentos Recetados:', 20, 100);
     doc.setFontSize(12);
     
-    // Protección para split
-    const medicamentos = consulta.medicamentos && typeof consulta.medicamentos === 'string' 
-      ? consulta.medicamentos.split(',').map(m => m.trim()) 
-      : ['No se recetaron medicamentos'];
+    // Usar la función helper para manejar medicamentos de forma segura
+    const medicamentos = obtenerMedicamentosArray(consulta.medicamentos);
     
     let yPos = 110;
     medicamentos.forEach((med, i) => {
@@ -943,10 +951,8 @@ function App() {
         }
       } else if (tipo === 'receta') {
         doc.text('Medicamentos Recetados:', 20, 125);
-        // Protección para split
-        const medicamentos = consulta.medicamentos && typeof consulta.medicamentos === 'string' 
-          ? consulta.medicamentos.split(',').map(m => m.trim()) 
-          : ['No se recetaron medicamentos'];
+        // Usar la función helper para manejar medicamentos de forma segura
+        const medicamentos = obtenerMedicamentosArray(consulta.medicamentos);
         let yPos = 135;
         medicamentos.forEach((med, i) => {
           doc.text(`${i + 1}. ${med}`, 25, yPos);

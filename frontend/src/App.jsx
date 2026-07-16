@@ -620,7 +620,11 @@ function App() {
     doc.text('Medicamentos Recetados:', 20, 100);
     doc.setFontSize(12);
     
-    const medicamentos = consulta.medicamentos ? consulta.medicamentos.split(',').map(m => m.trim()) : ['No se recetaron medicamentos'];
+    // Protección para split
+    const medicamentos = consulta.medicamentos && typeof consulta.medicamentos === 'string' 
+      ? consulta.medicamentos.split(',').map(m => m.trim()) 
+      : ['No se recetaron medicamentos'];
+    
     let yPos = 110;
     medicamentos.forEach((med, i) => {
       doc.text(`${i + 1}. ${med}`, 25, yPos);
@@ -859,8 +863,8 @@ function App() {
     toast.success(`✅ ${usuarios.length} usuarios exportados correctamente`);
   };
 
-    // ===== FUNCIONES DE ENVÍO DE CORREOS =====
-    const enviarCorreoPDF = async (consulta, paciente, tipo) => {
+  // ===== FUNCIONES DE ENVÍO DE CORREOS =====
+  const enviarCorreoPDF = async (consulta, paciente, tipo) => {
     const destinatario = prompt('📧 Ingresa el correo electrónico del destinatario:');
     if (!destinatario) return;
     
@@ -939,7 +943,10 @@ function App() {
         }
       } else if (tipo === 'receta') {
         doc.text('Medicamentos Recetados:', 20, 125);
-        const medicamentos = consulta.medicamentos ? consulta.medicamentos.split(',').map(m => m.trim()) : ['No se recetaron medicamentos'];
+        // Protección para split
+        const medicamentos = consulta.medicamentos && typeof consulta.medicamentos === 'string' 
+          ? consulta.medicamentos.split(',').map(m => m.trim()) 
+          : ['No se recetaron medicamentos'];
         let yPos = 135;
         medicamentos.forEach((med, i) => {
           doc.text(`${i + 1}. ${med}`, 25, yPos);
@@ -1273,7 +1280,6 @@ function App() {
           </div>
         )}
 
-        {/* MODALES */}
         {/* Modal de Editar Paciente */}
         {mostrarModalEditar && pacienteEditando && (
           <div style={styles.modalOverlay}>
@@ -1601,7 +1607,6 @@ function App() {
                   <input type="date" name="fecha" value={examenForm.fecha || ''} onChange={handleChangeExamen} style={styles.cardInput} required />
                 </div>
 
-                {/* Campos específicos - resumidos para no alargar */}
                 <div style={styles.formDivider}>--- Diagnóstico y Exploración ---</div>
 
                 <div style={styles.formGroup}>
@@ -1657,6 +1662,7 @@ function App() {
     </div>
   );
 }
+
 // ===== ESTILOS =====
 const styles = {
   loginContainer: {

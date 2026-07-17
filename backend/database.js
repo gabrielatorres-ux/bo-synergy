@@ -1,8 +1,8 @@
 const { createClient } = require('@supabase/supabase-js');
 
-// Credenciales de Supabase con Secret Key
-const supabaseUrl = 'https://gbdanalmsrsuellsaany.supabase.co';
-const supabaseKey = 'sb_secret_EPCgQxas0XjROQU3uy6NVQ_C2QG6AEU'; // ← PEGA TU SECRET KEY AQUÍ
+// Credenciales de Supabase desde variables de entorno
+const supabaseUrl = process.env.SUPABASE_URL || 'https://gbdanalmsrsuellsaany.supabase.co';
+const supabaseKey = process.env.SUPABASE_KEY || 'sb_publishable_HS3De2l_VwTKAF9otZSVXA_nGHmXRyU';
 
 // Crear cliente de Supabase
 const supabase = createClient(supabaseUrl, supabaseKey, {
@@ -55,6 +55,7 @@ const testConnection = async () => {
     const { data, error } = await supabase.from('pacientes').select('count(*)', { count: 'exact', head: true });
     if (error) throw error;
     console.log('✅ Conexión a Supabase establecida correctamente');
+    console.log('🔑 Usando clave:', supabaseKey ? '✅ Configurada' : '❌ No configurada');
     return true;
   } catch (error) {
     console.error('❌ Error al conectar a Supabase:', error.message);

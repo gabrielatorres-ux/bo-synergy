@@ -1,23 +1,30 @@
-const { createClient } = require('@supabase/supabase-js');
+const { Pool } = require('pg');
 
-// Credenciales de Supabase
-const supabaseUrl = 'https://gbdanalmsrsuellsaany.supabase.co';
-const supabaseKey = 'sb_publishable_HS3De2l_VwTKAF9otZSVXA_nGHmXRyU';
+// Configuración de Supabase con IP para evitar problemas de IPv6
+const pool = new Pool({
+  host: '104.18.38.10',  // IP de Supabase
+  port: 5432,
+  database: 'postgres',
+  user: 'postgres',
+  password: 'BoSynergy2024!',
+  ssl: {
+    rejectUnauthorized: false
+  },
+  // Forzar IPv4
+  family: 4,
+  // Timeout de conexión
+  connectionTimeoutMillis: 10000,
+  // Máximo de clientes en el pool
+  max: 10,
+  // Tiempo de inactividad antes de cerrar
+  idleTimeoutMillis: 30000,
+});
 
-// Crear cliente de Supabase
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-// Función para ejecutar consultas usando la API REST de Supabase
-const query = async (table, select = '*', filters = {}) => {
+// Función para ejecutar consultas
+const query = async (text, params) => {
   try {
-    console.log('📝 Consultando tabla:', table);
-    let queryBuilder = supabase.from(table).select(select);
-    Object.keys(filters).forEach(key => {
-      queryBuilder = queryBuilder.eq(key, filters[key]);
-    });
-    const { data, error } = await queryBuilder;
-    if (error) throw error;
-    return { rows: data || [] };
+    const result = await pool.query(text, params);
+    return result;
   } catch (error) {
     console.error('❌ Error en query:', error);
     throw error;
@@ -25,24 +32,20 @@ const query = async (table, select = '*', filters = {}) => {
 };
 
 // Función para obtener un solo resultado
-const queryOne = async (table, select = '*', filters = {}) => {
-  const result = await query(table, select, filters);
-  return result.rows[0] || null;
+const queryOne = async (text, params) => {
+  try {
+    const result = await pool.query(text, params);
+    return result.rows[0] || null;
+  } catch (error) {
+    console.error('❌ Error en queryOne:', error);
+    throw error;
+  }
 };
 
-// Función para ejecutar INSERT, UPDATE, DELETE
-const queryRun = async (table, data, operation = 'insert') => {
+// Función para ejecutar consultas sin retorno (INSERT, UPDATE, DELETE)
+const queryRun = async (text, params) => {
   try {
-    console.log('📝 Ejecutando operación:', operation, 'en tabla:', table);
-    let result;
-    if (operation === 'insert') {
-      result = await supabase.from(table).insert(data);
-    } else if (operation === 'update') {
-      result = await supabase.from(table).update(data);
-    } else if (operation === 'delete') {
-      result = await supabase.from(table).delete();
-    }
-    if (result.error) throw result.error;
+    const result = await pool.query(text, params);
     return result;
   } catch (error) {
     console.error('❌ Error en queryRun:', error);
@@ -50,24 +53,20 @@ const queryRun = async (table, data, operation = 'insert') => {
   }
 };
 
-// Función de prueba de conexión
+// Función para verificar la conexión
 const testConnection = async () => {
   try {
-    console.log('🔍 Probando conexión a Supabase...');
-    const { data, error } = await supabase.from('pacientes').select('*', { count: 'exact', head: true });
-    if (error) {
-      console.error('❌ Error en testConnection:', error);
-      return false;
-    }
+    const result = await pool.query('SELECT NOW()');
     console.log('✅ Conexión a Supabase establecida correctamente');
+    console.log('📅 Hora del servidor:', result.rows[0].now);
     return true;
   } catch (error) {
     console.error('❌ Error al conectar a Supabase:', error.message);
-    console.error('Detalles del error:', error);
     return false;
   }
 };
 
+// Probar conexión al iniciar
 testConnection();
 
-module.exports = { query, queryOne, queryRun, supabase };
+module.exports = { query, queryOne, queryRun, pool };

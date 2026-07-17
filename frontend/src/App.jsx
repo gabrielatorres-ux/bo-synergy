@@ -630,7 +630,7 @@ function App() {
     doc.text('Medicamentos Recetados:', 20, 100);
     doc.setFontSize(12);
     
-    // ===== CORRECCIÓN: Usar la función helper =====
+    // === CORRECCIÓN: Usar función helper para evitar error split ===
     const medicamentos = obtenerMedicamentosArray(consulta.medicamentos);
     
     let yPos = 110;
@@ -951,7 +951,7 @@ function App() {
         }
       } else if (tipo === 'receta') {
         doc.text('Medicamentos Recetados:', 20, 125);
-        // ===== CORRECCIÓN: Usar la función helper =====
+        // === CORRECCIÓN: Usar función helper para evitar error split ===
         const medicamentos = obtenerMedicamentosArray(consulta.medicamentos);
         let yPos = 135;
         medicamentos.forEach((med, i) => {

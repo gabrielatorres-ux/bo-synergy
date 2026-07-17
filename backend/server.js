@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { query, queryOne, queryRun } = require('./database');
-const { enviarCorreo } = require('./emailService');
+const { enviarCorreo, enviarCorreoSimple } = require('./emailService');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -28,7 +28,7 @@ app.post('/api/pacientes', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
       [num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor]
     );
-    res.json({ id: result.rows[0]?.id, message: 'Paciente agregado correctamente' });
+    res.json({ id: result.rows[0]?.id || result.insertId, message: 'Paciente agregado correctamente' });
   } catch (error) {
     if (error.code === '23505') {
       return res.status(400).json({ error: 'El número de empleado ya existe' });
@@ -41,15 +41,12 @@ app.put('/api/pacientes/:id', async (req, res) => {
   const { id } = req.params;
   const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor } = req.body;
   try {
-    const result = await queryRun(
+    await queryRun(
       `UPDATE pacientes 
        SET num_empleado = $1, nombre = $2, fecha_nac = $3, nss = $4, contacto_emergencia = $5, puesto = $6, area = $7, supervisor = $8
        WHERE id = $9`,
       [num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, id]
     );
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Paciente no encontrado' });
-    }
     res.json({ message: 'Paciente actualizado correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -112,7 +109,7 @@ app.put('/api/consultas/:id', async (req, res) => {
   } = req.body;
 
   try {
-    const result = await queryRun(
+    await queryRun(
       `UPDATE consultas 
        SET fecha = $1, motivo = $2, alergias = $3, cabeza = $4, cuello = $5, torax = $6, abdomen = $7, 
            espalda = $8, extremidades_superiores = $9, extremidades_inferiores = $10, 
@@ -123,9 +120,6 @@ app.put('/api/consultas/:id', async (req, res) => {
         extremidades_superiores, extremidades_inferiores, ojos_oidos_garganta, causa,
         impresion_diagnostica, medicamentos, receta, cie10, id]
     );
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Consulta no encontrada' });
-    }
     res.json({ message: 'Consulta actualizada correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });

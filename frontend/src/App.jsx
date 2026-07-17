@@ -620,8 +620,10 @@ function App() {
     doc.text('Medicamentos Recetados:', 20, 100);
     doc.setFontSize(12);
     
-    const medicamentos = consulta.medicamentos ? consulta.medicamentos.split(',').map(m => m.trim()) : ['No se recetaron medicamentos'];
-    let yPos = 110;
+    const medicamentos = (consulta.medicamentos && typeof consulta.medicamentos === 'string') 
+  ? consulta.medicamentos.split(',').map(m => m.trim()) 
+  : ['No se recetaron medicamentos'];
+
     medicamentos.forEach((med, i) => {
       doc.text(`${i + 1}. ${med}`, 25, yPos);
       yPos += 10;
@@ -939,7 +941,9 @@ function App() {
         }
       } else if (tipo === 'receta') {
         doc.text('Medicamentos Recetados:', 20, 125);
-        const medicamentos = consulta.medicamentos ? consulta.medicamentos.split(',').map(m => m.trim()) : ['No se recetaron medicamentos'];
+        const medicamentos = (consulta.medicamentos && typeof consulta.medicamentos === 'string') 
+        ? consulta.medicamentos.split(',').map(m => m.trim()) 
+        : ['No se recetaron medicamentos'];
         let yPos = 135;
         medicamentos.forEach((med, i) => {
           doc.text(`${i + 1}. ${med}`, 25, yPos);

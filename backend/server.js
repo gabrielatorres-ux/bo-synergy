@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { query, queryOne, queryRun } = require('./database');
+const { query, queryOne, queryRun, supabase } = require('./database');
 const { enviarCorreo, enviarCorreoSimple } = require('./emailService');
 
 const app = express();

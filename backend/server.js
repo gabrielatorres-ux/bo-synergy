@@ -1,19 +1,80 @@
 const express = require('express');
 const cors = require('cors');
+const multer = require('multer');
 const { query, queryOne, queryRun, supabase } = require('./database');
 const { enviarCorreo, enviarCorreoSimple } = require('./emailService');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 app.use(cors());
 app.use(express.json());
+
+// ==================== RUTAS DE EMPRESAS ====================
+
+const subirLogo = async (empresaId, file) => {
+  const nombreArchivo = `${empresaId}-${Date.now()}.${file.originalname.split('.').pop()}`;
+  const { error } = await supabase.storage.from('logos').upload(nombreArchivo, file.buffer, {
+    contentType: file.mimetype,
+    upsert: true
+  });
+  if (error) throw error;
+  const { data } = supabase.storage.from('logos').getPublicUrl(nombreArchivo);
+  return data.publicUrl;
+};
+
+app.get('/api/empresas', async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM empresas ORDER BY id');
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/empresas', upload.single('logo'), async (req, res) => {
+  const { nombre } = req.body;
+  if (!nombre) {
+    return res.status(400).json({ error: 'El nombre es requerido' });
+  }
+  try {
+    const result = await queryRun(
+      'INSERT INTO empresas (nombre) VALUES ($1) RETURNING id',
+      [nombre]
+    );
+    const id = result.rows[0].id;
+    if (req.file) {
+      const logoUrl = await subirLogo(id, req.file);
+      await queryRun('UPDATE empresas SET logo_url = $1 WHERE id = $2', [logoUrl, id]);
+    }
+    res.json({ id, message: 'Empresa creada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/empresas/:id', upload.single('logo'), async (req, res) => {
+  const { id } = req.params;
+  const { nombre } = req.body;
+  try {
+    if (req.file) {
+      const logoUrl = await subirLogo(id, req.file);
+      await queryRun('UPDATE empresas SET nombre = $1, logo_url = $2 WHERE id = $3', [nombre, logoUrl, id]);
+    } else {
+      await queryRun('UPDATE empresas SET nombre = $1 WHERE id = $2', [nombre, id]);
+    }
+    res.json({ message: 'Empresa actualizada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // ==================== RUTAS DE PACIENTES ====================
 
 app.get('/api/pacientes', async (req, res) => {
   try {
-    const { search = '', page = 1, limit = 20 } = req.query;
+    const { search = '', page = 1, limit = 20, empresa_id } = req.query;
     const pageNum = Math.max(parseInt(page) || 1, 1);
     const limitNum = Math.max(parseInt(limit) || 20, 1);
     const offset = (pageNum - 1) * limitNum;
@@ -21,15 +82,15 @@ app.get('/api/pacientes', async (req, res) => {
 
     const result = await query(
       `SELECT * FROM pacientes
-       WHERE nombre ILIKE $1 OR num_empleado ILIKE $1 OR area ILIKE $1
+       WHERE empresa_id = $1 AND (nombre ILIKE $2 OR num_empleado ILIKE $2 OR area ILIKE $2)
        ORDER BY id
-       LIMIT $2 OFFSET $3`,
-      [searchTerm, limitNum, offset]
+       LIMIT $3 OFFSET $4`,
+      [empresa_id, searchTerm, limitNum, offset]
     );
     const totalResult = await queryOne(
       `SELECT COUNT(*) as total FROM pacientes
-       WHERE nombre ILIKE $1 OR num_empleado ILIKE $1 OR area ILIKE $1`,
-      [searchTerm]
+       WHERE empresa_id = $1 AND (nombre ILIKE $2 OR num_empleado ILIKE $2 OR area ILIKE $2)`,
+      [empresa_id, searchTerm]
     );
     const total = parseInt(totalResult.total);
 
@@ -45,12 +106,12 @@ app.get('/api/pacientes', async (req, res) => {
 });
 
 app.post('/api/pacientes', async (req, res) => {
-  const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor } = req.body;
+  const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id } = req.body;
   try {
     const result = await queryRun(
-      `INSERT INTO pacientes (num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-      [num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor]
+      `INSERT INTO pacientes (num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+      [num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id]
     );
     res.json({ id: result.rows[0]?.id || result.insertId, message: 'Paciente agregado correctamente' });
   } catch (error) {
@@ -63,13 +124,13 @@ app.post('/api/pacientes', async (req, res) => {
 
 app.put('/api/pacientes/:id', async (req, res) => {
   const { id } = req.params;
-  const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor } = req.body;
+  const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id } = req.body;
   try {
     await queryRun(
-      `UPDATE pacientes 
+      `UPDATE pacientes
        SET num_empleado = $1, nombre = $2, fecha_nac = $3, nss = $4, contacto_emergencia = $5, puesto = $6, area = $7, supervisor = $8
-       WHERE id = $9`,
-      [num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, id]
+       WHERE id = $9 AND empresa_id = $10`,
+      [num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, id, empresa_id]
     );
     res.json({ message: 'Paciente actualizado correctamente' });
   } catch (error) {
@@ -79,9 +140,10 @@ app.put('/api/pacientes/:id', async (req, res) => {
 
 app.delete('/api/pacientes/:id', async (req, res) => {
   const { id } = req.params;
+  const { empresa_id } = req.query;
   try {
     await queryRun('DELETE FROM consultas WHERE paciente_id = $1', [id]);
-    await queryRun('DELETE FROM pacientes WHERE id = $1', [id]);
+    await queryRun('DELETE FROM pacientes WHERE id = $1 AND empresa_id = $2', [id, empresa_id]);
     res.json({ message: 'Paciente eliminado correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -315,13 +377,19 @@ app.post('/api/login', async (req, res) => {
   }
 
   try {
-    const result = await queryOne('SELECT * FROM usuarios WHERE num_empleado = $1 AND password = $2', [num_empleado, password]);
+    const result = await queryOne(
+      `SELECT u.*, e.nombre as empresa_nombre, e.logo_url as empresa_logo_url
+       FROM usuarios u
+       JOIN empresas e ON u.empresa_id = e.id
+       WHERE u.num_empleado = $1 AND u.password = $2`,
+      [num_empleado, password]
+    );
     if (!result) {
       return res.status(401).json({ error: 'Credenciales incorrectas' });
     }
     const { password: _, ...userWithoutPassword } = result;
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       user: userWithoutPassword,
       message: `Bienvenido ${result.nombre}`
     });
@@ -334,7 +402,11 @@ app.post('/api/login', async (req, res) => {
 
 app.get('/api/usuarios', async (req, res) => {
   try {
-    const result = await query('SELECT id, num_empleado, nombre, rol, fecha_registro FROM usuarios');
+    const { empresa_id } = req.query;
+    const result = await query(
+      'SELECT id, num_empleado, nombre, rol, fecha_registro FROM usuarios WHERE empresa_id = $1',
+      [empresa_id]
+    );
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -342,17 +414,17 @@ app.get('/api/usuarios', async (req, res) => {
 });
 
 app.post('/api/usuarios', async (req, res) => {
-  const { num_empleado, nombre, rol, password } = req.body;
-  
+  const { num_empleado, nombre, rol, password, empresa_id } = req.body;
+
   if (!num_empleado || !nombre || !rol || !password) {
     return res.status(400).json({ error: 'Todos los campos son requeridos' });
   }
 
   try {
     const result = await queryRun(
-      `INSERT INTO usuarios (num_empleado, nombre, rol, password, fecha_registro)
-       VALUES ($1, $2, $3, $4, NOW()) RETURNING id`,
-      [num_empleado, nombre, rol, password]
+      `INSERT INTO usuarios (num_empleado, nombre, rol, password, empresa_id, fecha_registro)
+       VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING id`,
+      [num_empleado, nombre, rol, password, empresa_id]
     );
     res.json({ id: result.rows[0]?.id, message: 'Usuario creado correctamente' });
   } catch (error) {
@@ -365,7 +437,8 @@ app.post('/api/usuarios', async (req, res) => {
 
 app.delete('/api/usuarios/:id', async (req, res) => {
   const { id } = req.params;
-  
+  const { empresa_id } = req.query;
+
   try {
     const user = await queryOne('SELECT num_empleado FROM usuarios WHERE id = $1', [id]);
     if (!user) {
@@ -374,7 +447,7 @@ app.delete('/api/usuarios/:id', async (req, res) => {
     if (user.num_empleado === 'ADMIN001') {
       return res.status(403).json({ error: 'No se puede eliminar al administrador principal' });
     }
-    await queryRun('DELETE FROM usuarios WHERE id = $1', [id]);
+    await queryRun('DELETE FROM usuarios WHERE id = $1 AND empresa_id = $2', [id, empresa_id]);
     res.json({ message: 'Usuario eliminado correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -385,12 +458,28 @@ app.delete('/api/usuarios/:id', async (req, res) => {
 
 app.get('/api/estadisticas', async (req, res) => {
   try {
-    const totalPacientes = await queryOne('SELECT COUNT(*) as total FROM pacientes');
-    const totalConsultas = await queryOne('SELECT COUNT(*) as total FROM consultas');
-    const totalEMI = await queryOne('SELECT COUNT(*) as total FROM emi');
-    const totalEMP = await queryOne('SELECT COUNT(*) as total FROM emp');
-    const totalEMR = await queryOne('SELECT COUNT(*) as total FROM emr');
-    const totalVulnerabilidad = await queryOne('SELECT COUNT(*) as total FROM vulnerabilidad');
+    const { empresa_id } = req.query;
+    const totalPacientes = await queryOne('SELECT COUNT(*) as total FROM pacientes WHERE empresa_id = $1', [empresa_id]);
+    const totalConsultas = await queryOne(
+      'SELECT COUNT(*) as total FROM consultas c JOIN pacientes p ON c.paciente_id = p.id WHERE p.empresa_id = $1',
+      [empresa_id]
+    );
+    const totalEMI = await queryOne(
+      'SELECT COUNT(*) as total FROM emi e JOIN pacientes p ON e.paciente_id = p.id WHERE p.empresa_id = $1',
+      [empresa_id]
+    );
+    const totalEMP = await queryOne(
+      'SELECT COUNT(*) as total FROM emp e JOIN pacientes p ON e.paciente_id = p.id WHERE p.empresa_id = $1',
+      [empresa_id]
+    );
+    const totalEMR = await queryOne(
+      'SELECT COUNT(*) as total FROM emr e JOIN pacientes p ON e.paciente_id = p.id WHERE p.empresa_id = $1',
+      [empresa_id]
+    );
+    const totalVulnerabilidad = await queryOne(
+      'SELECT COUNT(*) as total FROM vulnerabilidad v JOIN pacientes p ON v.paciente_id = p.id WHERE p.empresa_id = $1',
+      [empresa_id]
+    );
 
     res.json({
       totalPacientes: parseInt(totalPacientes.total) || 0,
@@ -407,14 +496,16 @@ app.get('/api/estadisticas', async (req, res) => {
 
 app.get('/api/top-motivos', async (req, res) => {
   try {
+    const { empresa_id } = req.query;
     const result = await query(`
-      SELECT motivo, COUNT(*) as count 
-      FROM consultas 
-      WHERE motivo IS NOT NULL AND motivo != ''
-      GROUP BY motivo 
-      ORDER BY count DESC 
+      SELECT motivo, COUNT(*) as count
+      FROM consultas c
+      JOIN pacientes p ON c.paciente_id = p.id
+      WHERE p.empresa_id = $1 AND motivo IS NOT NULL AND motivo != ''
+      GROUP BY motivo
+      ORDER BY count DESC
       LIMIT 5
-    `);
+    `, [empresa_id]);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -423,15 +514,16 @@ app.get('/api/top-motivos', async (req, res) => {
 
 app.get('/api/top-areas', async (req, res) => {
   try {
+    const { empresa_id } = req.query;
     const result = await query(`
-      SELECT p.area, COUNT(c.id) as count 
+      SELECT p.area, COUNT(c.id) as count
       FROM consultas c
       JOIN pacientes p ON c.paciente_id = p.id
-      WHERE p.area IS NOT NULL AND p.area != ''
-      GROUP BY p.area 
-      ORDER BY count DESC 
+      WHERE p.empresa_id = $1 AND p.area IS NOT NULL AND p.area != ''
+      GROUP BY p.area
+      ORDER BY count DESC
       LIMIT 5
-    `);
+    `, [empresa_id]);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -440,13 +532,16 @@ app.get('/api/top-areas', async (req, res) => {
 
 app.get('/api/consultas-por-mes', async (req, res) => {
   try {
+    const { empresa_id } = req.query;
     const result = await query(`
-      SELECT TO_CHAR(fecha, 'YYYY-MM') as mes, COUNT(*) as count
-      FROM consultas
+      SELECT TO_CHAR(c.fecha, 'YYYY-MM') as mes, COUNT(*) as count
+      FROM consultas c
+      JOIN pacientes p ON c.paciente_id = p.id
+      WHERE p.empresa_id = $1
       GROUP BY mes
       ORDER BY mes DESC
       LIMIT 12
-    `);
+    `, [empresa_id]);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -455,13 +550,14 @@ app.get('/api/consultas-por-mes', async (req, res) => {
 
 app.get('/api/pacientes-por-area', async (req, res) => {
   try {
+    const { empresa_id } = req.query;
     const result = await query(`
-      SELECT area, COUNT(*) as count 
-      FROM pacientes 
-      WHERE area IS NOT NULL AND area != ''
-      GROUP BY area 
+      SELECT area, COUNT(*) as count
+      FROM pacientes
+      WHERE empresa_id = $1 AND area IS NOT NULL AND area != ''
+      GROUP BY area
       ORDER BY count DESC
-    `);
+    `, [empresa_id]);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });

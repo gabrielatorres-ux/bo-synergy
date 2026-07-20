@@ -7,6 +7,8 @@ import * as XLSX from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
 import './App.css';
 
+const api = axios.create();
+
 function App() {
   const [usuario, setUsuario] = useState(null);
   const [numEmpleado, setNumEmpleado] = useState('');
@@ -35,7 +37,13 @@ function App() {
     password: ''
   });
   const [mensajeUsuario, setMensajeUsuario] = useState('');
-  
+
+  const [empresas, setEmpresas] = useState([]);
+  const [nuevaEmpresaNombre, setNuevaEmpresaNombre] = useState('');
+  const [nuevaEmpresaLogo, setNuevaEmpresaLogo] = useState(null);
+  const [miEmpresaNombre, setMiEmpresaNombre] = useState('');
+  const [miEmpresaLogo, setMiEmpresaLogo] = useState(null);
+
   const [mostrarConsulta, setMostrarConsulta] = useState(false);
   const [pacienteSeleccionado, setPacienteSeleccionado] = useState(null);
   const [consultaForm, setConsultaForm] = useState({
@@ -71,12 +79,45 @@ function App() {
 
   const API_URL = 'https://bo-synergy-backend.onrender.com/api';
 
+  // Agrega automáticamente el empresa_id del usuario logueado a cada
+  // petición, para que el backend filtre los datos de esa empresa.
+  useEffect(() => {
+    const interceptorId = api.interceptors.request.use((config) => {
+      const empresaId = usuario?.empresa_id;
+      if (!empresaId) return config;
+      if (config.data instanceof FormData) {
+        config.data.append('empresa_id', empresaId);
+      } else if (config.method === 'get' || config.method === 'delete') {
+        config.params = { ...config.params, empresa_id: empresaId };
+      } else {
+        config.data = { ...(config.data || {}), empresa_id: empresaId };
+      }
+      return config;
+    });
+    return () => api.interceptors.request.eject(interceptorId);
+  }, [usuario]);
+
+  // Carga los datos iniciales una vez que el interceptor de arriba ya
+  // conoce el empresa_id del usuario logueado (por eso va en un efecto
+  // aparte en vez de llamarse directo dentro de handleLogin).
+  useEffect(() => {
+    if (!usuario) return;
+    cargarPacientes(1, '');
+    if (usuario.rol === 'admin') {
+      cargarUsuarios();
+    }
+    if (usuario.es_superadmin) {
+      cargarEmpresas();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usuario?.id]);
+
   // ===== FUNCIONES DE LOGIN =====
   const handleLogin = async (e) => {
     e.preventDefault();
     setErrorLogin('');
     try {
-      const response = await axios.post(`${API_URL}/login`, {
+      const response = await api.post(`${API_URL}/login`, {
         num_empleado: numEmpleado,
         password: password
       });
@@ -85,10 +126,6 @@ function App() {
         setMostrarLogin(false);
         setNumEmpleado('');
         setPassword('');
-        cargarPacientes();
-        if (response.data.user.rol === 'admin') {
-          cargarUsuarios();
-        }
       }
     } catch (error) {
       if (error.response) {
@@ -111,7 +148,7 @@ function App() {
   // ===== FUNCIONES DE PACIENTES =====
   const cargarPacientes = async (page = 1, search = busquedaPaciente) => {
     try {
-      const response = await axios.get(`${API_URL}/pacientes`, {
+      const response = await api.get(`${API_URL}/pacientes`, {
         params: { page, limit: 20, search }
       });
       setPacientes(response.data.pacientes);
@@ -141,7 +178,7 @@ function App() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${API_URL}/pacientes`, formData);
+      await api.post(`${API_URL}/pacientes`, formData);
       toast.success('✅ Paciente agregado');
       setFormData({
         num_empleado: '',
@@ -163,7 +200,7 @@ function App() {
   const handleEliminarPaciente = async (id, nombre) => {
     if (!confirm(`¿Estás seguro de eliminar al paciente ${nombre}?`)) return;
     try {
-      await axios.delete(`${API_URL}/pacientes/${id}`);
+      await api.delete(`${API_URL}/pacientes/${id}`);
       toast.success('✅ Paciente eliminado correctamente');
       cargarPacientes(paginaPacientes);
     } catch (error) {
@@ -189,7 +226,7 @@ function App() {
   const handleActualizarPaciente = async (e) => {
     e.preventDefault();
     try {
-      await axios.put(`${API_URL}/pacientes/${pacienteEditando.id}`, formData);
+      await api.put(`${API_URL}/pacientes/${pacienteEditando.id}`, formData);
       toast.success('✅ Paciente actualizado correctamente');
       setMostrarModalEditar(false);
       setPacienteEditando(null);
@@ -212,7 +249,7 @@ function App() {
   // ===== FUNCIONES DE USUARIOS =====
   const cargarUsuarios = async () => {
     try {
-      const response = await axios.get(`${API_URL}/usuarios`);
+      const response = await api.get(`${API_URL}/usuarios`);
       setUsuarios(response.data);
     } catch (error) {
       console.error('Error al cargar usuarios:', error);
@@ -223,7 +260,7 @@ function App() {
     e.preventDefault();
     setMensajeUsuario('');
     try {
-      const response = await axios.post(`${API_URL}/usuarios`, nuevoUsuario);
+      const response = await api.post(`${API_URL}/usuarios`, nuevoUsuario);
       toast.success(`✅ Usuario ${nuevoUsuario.nombre} creado correctamente`);
       setMensajeUsuario(`✅ ${response.data.message}`);
       setNuevoUsuario({
@@ -250,7 +287,7 @@ function App() {
     }
     if (!confirm(`¿Eliminar al usuario ${numEmpleado}?`)) return;
     try {
-      await axios.delete(`${API_URL}/usuarios/${id}`);
+      await api.delete(`${API_URL}/usuarios/${id}`);
       setMensajeUsuario('✅ Usuario eliminado correctamente');
       cargarUsuarios();
     } catch (error) {
@@ -269,13 +306,53 @@ function App() {
     });
   };
 
+  // ===== FUNCIONES DE EMPRESAS =====
+  const cargarEmpresas = async () => {
+    try {
+      const response = await api.get(`${API_URL}/empresas`);
+      setEmpresas(response.data);
+    } catch (error) {
+      console.error('Error al cargar empresas:', error);
+    }
+  };
+
+  const handleCrearEmpresa = async (e) => {
+    e.preventDefault();
+    try {
+      const data = new FormData();
+      data.append('nombre', nuevaEmpresaNombre);
+      if (nuevaEmpresaLogo) data.append('logo', nuevaEmpresaLogo);
+      await api.post(`${API_URL}/empresas`, data);
+      toast.success('✅ Empresa creada correctamente');
+      setNuevaEmpresaNombre('');
+      setNuevaEmpresaLogo(null);
+      cargarEmpresas();
+    } catch (error) {
+      toast.error('❌ Error al crear empresa');
+    }
+  };
+
+  const handleActualizarMiEmpresa = async (e) => {
+    e.preventDefault();
+    try {
+      const data = new FormData();
+      data.append('nombre', miEmpresaNombre || usuario.empresa_nombre);
+      if (miEmpresaLogo) data.append('logo', miEmpresaLogo);
+      await api.put(`${API_URL}/empresas/${usuario.empresa_id}`, data);
+      toast.success('✅ Empresa actualizada. Cierra sesión y vuelve a entrar para ver los cambios reflejados.');
+      setMiEmpresaLogo(null);
+    } catch (error) {
+      toast.error('❌ Error al actualizar tu empresa');
+    }
+  };
+
   // ===== FUNCIONES DE CONSULTAS =====
   const handleAbrirConsulta = async (paciente) => {
     setPacienteSeleccionado(paciente);
     setMostrarConsulta(true);
     setMensajeConsulta('');
     try {
-      const response = await axios.get(`${API_URL}/consultas/${paciente.id}`);
+      const response = await api.get(`${API_URL}/consultas/${paciente.id}`);
       setConsultasPaciente(response.data);
     } catch (error) {
       console.error('Error al cargar consultas:', error);
@@ -316,12 +393,12 @@ function App() {
   const handleGuardarConsulta = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${API_URL}/consultas`, {
+      await api.post(`${API_URL}/consultas`, {
         ...consultaForm,
         paciente_id: pacienteSeleccionado.id
       });
       setMensajeConsulta('✅ Consulta registrada correctamente');
-      const response = await axios.get(`${API_URL}/consultas/${pacienteSeleccionado.id}`);
+      const response = await api.get(`${API_URL}/consultas/${pacienteSeleccionado.id}`);
       setConsultasPaciente(response.data);
       setConsultaForm({
         fecha: new Date().toISOString().split('T')[0],
@@ -350,9 +427,9 @@ function App() {
   const handleEliminarConsulta = async (id) => {
     if (!confirm(`¿Eliminar esta consulta?`)) return;
     try {
-      await axios.delete(`${API_URL}/consultas/${id}`);
+      await api.delete(`${API_URL}/consultas/${id}`);
       toast.success('✅ Consulta eliminada correctamente');
-      const response = await axios.get(`${API_URL}/consultas/${pacienteSeleccionado.id}`);
+      const response = await api.get(`${API_URL}/consultas/${pacienteSeleccionado.id}`);
       setConsultasPaciente(response.data);
     } catch (error) {
       toast.error('❌ Error al eliminar consulta');
@@ -385,14 +462,14 @@ function App() {
   const handleActualizarConsulta = async (e) => {
     e.preventDefault();
     try {
-      await axios.put(`${API_URL}/consultas/${consultaEditando.id}`, {
+      await api.put(`${API_URL}/consultas/${consultaEditando.id}`, {
         ...consultaForm,
         paciente_id: pacienteSeleccionado.id
       });
       toast.success('✅ Consulta actualizada correctamente');
       setMostrarModalEditarConsulta(false);
       setConsultaEditando(null);
-      const response = await axios.get(`${API_URL}/consultas/${pacienteSeleccionado.id}`);
+      const response = await api.get(`${API_URL}/consultas/${pacienteSeleccionado.id}`);
       setConsultasPaciente(response.data);
       setConsultaForm({
         fecha: new Date().toISOString().split('T')[0],
@@ -498,7 +575,7 @@ function App() {
     setExamenForm(formFields);
 
     try {
-      const response = await axios.get(`${API_URL}/${tipo}/${paciente.id}`);
+      const response = await api.get(`${API_URL}/${tipo}/${paciente.id}`);
       setExamenesPaciente(response.data);
     } catch (error) {
       console.error(`Error al cargar ${tipo}:`, error);
@@ -523,12 +600,12 @@ function App() {
   const handleGuardarExamen = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${API_URL}/${tipoExamen}`, {
+      await api.post(`${API_URL}/${tipoExamen}`, {
         ...examenForm,
         paciente_id: pacienteSeleccionado.id
       });
       setMensajeExamen(`✅ ${tipoExamen.toUpperCase()} registrado correctamente`);
-      const response = await axios.get(`${API_URL}/${tipoExamen}/${pacienteSeleccionado.id}`);
+      const response = await api.get(`${API_URL}/${tipoExamen}/${pacienteSeleccionado.id}`);
       setExamenesPaciente(response.data);
       setExamenForm({
         fecha: new Date().toISOString().split('T')[0],
@@ -550,7 +627,7 @@ function App() {
     const fecha = new Date().toLocaleDateString('es-MX');
     
     doc.setFontSize(18);
-    doc.text('🏥 BO Synergy', 105, 20, { align: 'center' });
+    doc.text(`🏥 ${usuario?.empresa_nombre || 'BO Synergy'}`, 105, 20, { align: 'center' });
     doc.setFontSize(14);
     doc.text('CONSTANCIA DE CONSULTA', 105, 30, { align: 'center' });
     doc.line(20, 35, 190, 35);
@@ -607,7 +684,7 @@ function App() {
     
     doc.text('---', 20, yPos + 72);
     doc.setFontSize(10);
-    doc.text('Este documento es una constancia de la consulta realizada en BO Synergy.', 20, yPos + 85);
+    doc.text(`Este documento es una constancia de la consulta realizada en ${usuario?.empresa_nombre || 'BO Synergy'}.`, 20, yPos + 85);
     doc.text('Atentamente,', 20, yPos + 95);
     doc.text('_________________________', 20, yPos + 105);
     doc.text('Médico Responsable', 20, yPos + 115);
@@ -620,7 +697,7 @@ function App() {
     const fecha = new Date().toLocaleDateString('es-MX');
 
     doc.setFontSize(20);
-    doc.text('🏥 BO Synergy', 105, 20, { align: 'center' });
+    doc.text(`🏥 ${usuario?.empresa_nombre || 'BO Synergy'}`, 105, 20, { align: 'center' });
     doc.setFontSize(16);
     doc.text('R E C E T A   M É D I C A', 105, 30, { align: 'center' });
     doc.line(20, 35, 190, 35);
@@ -670,7 +747,7 @@ function App() {
     const fecha = new Date().toLocaleDateString('es-MX');
     
     doc.setFontSize(18);
-    doc.text('🏥 BO Synergy', 105, 20, { align: 'center' });
+    doc.text(`🏥 ${usuario?.empresa_nombre || 'BO Synergy'}`, 105, 20, { align: 'center' });
     doc.setFontSize(14);
     doc.text('REPORTE DE INCAPACIDAD', 105, 30, { align: 'center' });
     doc.line(20, 35, 190, 35);
@@ -706,7 +783,7 @@ function App() {
   const exportarPacientesExcel = async () => {
     let pacientesAExportar;
     try {
-      const response = await axios.get(`${API_URL}/pacientes`, {
+      const response = await api.get(`${API_URL}/pacientes`, {
         params: { page: 1, limit: 100000, search: busquedaPaciente }
       });
       pacientesAExportar = response.data.pacientes;
@@ -788,10 +865,10 @@ function App() {
   const exportarEstadisticasExcel = async () => {
     try {
       const [statsRes, motivosRes, areasRes, pacientesAreaRes] = await Promise.all([
-        axios.get(`${API_URL}/estadisticas`),
-        axios.get(`${API_URL}/top-motivos`),
-        axios.get(`${API_URL}/top-areas`),
-        axios.get(`${API_URL}/pacientes-por-area`),
+        api.get(`${API_URL}/estadisticas`),
+        api.get(`${API_URL}/top-motivos`),
+        api.get(`${API_URL}/top-areas`),
+        api.get(`${API_URL}/pacientes-por-area`),
       ]);
 
       const stats = statsRes.data;
@@ -904,9 +981,9 @@ function App() {
       const fecha = new Date().toLocaleDateString('es-MX');
       
       doc.setFontSize(18);
-      doc.text('🏥 BO Synergy', 105, 20, { align: 'center' });
+      doc.text(`🏥 ${usuario?.empresa_nombre || 'BO Synergy'}`, 105, 20, { align: 'center' });
       doc.setFontSize(14);
-      
+
       if (tipo === 'constancia') {
         doc.text('CONSTANCIA DE CONSULTA', 105, 30, { align: 'center' });
       } else if (tipo === 'receta') {
@@ -999,7 +1076,7 @@ function App() {
       
       const pdfBase64 = doc.output('datauristring').split(',')[1];
       
-      const response = await axios.post(`${API_URL}/enviar-${tipo}`, {
+      const response = await api.post(`${API_URL}/enviar-${tipo}`, {
         destinatario: destinatario,
         paciente: paciente,
         consulta: consulta,
@@ -1137,7 +1214,11 @@ function App() {
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerLeft}>
-          <span style={styles.headerTitle}>🏥 BO Synergy</span>
+          {usuario.empresa_logo_url ? (
+            <img src={usuario.empresa_logo_url} alt={usuario.empresa_nombre} style={styles.headerLogo} />
+          ) : (
+            <span style={styles.headerTitle}>🏥 {usuario.empresa_nombre || 'BO Synergy'}</span>
+          )}
           <span style={styles.headerRole}>👤 {usuario.nombre}</span>
           <span style={{
             ...styles.headerBadge,
@@ -1320,6 +1401,85 @@ function App() {
           </div>
         )}
 
+        {/* Mi Empresa - cualquier admin edita el nombre/logo de su propia empresa */}
+        {usuario.rol === 'admin' && (
+          <div style={styles.adminSection}>
+            <h2 style={styles.sectionTitle}>🏢 Mi Empresa</h2>
+            <div style={styles.formCard}>
+              <form onSubmit={handleActualizarMiEmpresa} style={styles.cardForm}>
+                <input
+                  placeholder="Nombre de la empresa"
+                  defaultValue={usuario.empresa_nombre}
+                  onChange={(e) => setMiEmpresaNombre(e.target.value)}
+                  style={styles.cardInput}
+                  required
+                />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setMiEmpresaLogo(e.target.files[0])}
+                  style={styles.cardInput}
+                />
+                {usuario.empresa_logo_url && (
+                  <img src={usuario.empresa_logo_url} alt="Logo actual" style={{ height: '48px', objectFit: 'contain' }} />
+                )}
+                <button type="submit" style={styles.saveButton}>Guardar Empresa</button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Gestión de Empresas - Solo Superadmin */}
+        {usuario.es_superadmin && (
+          <div style={styles.adminSection}>
+            <h2 style={styles.sectionTitle}>🏢 Gestión de Empresas</h2>
+            <div style={styles.adminGrid}>
+              <div style={styles.formCard}>
+                <div style={styles.cardHeader}>
+                  <h3 style={styles.cardTitle}>➕ Dar de Alta Empresa</h3>
+                </div>
+                <form onSubmit={handleCrearEmpresa} style={styles.cardForm}>
+                  <input
+                    placeholder="Nombre de la empresa *"
+                    value={nuevaEmpresaNombre}
+                    onChange={(e) => setNuevaEmpresaNombre(e.target.value)}
+                    style={styles.cardInput}
+                    required
+                  />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setNuevaEmpresaLogo(e.target.files[0])}
+                    style={styles.cardInput}
+                  />
+                  <button type="submit" style={styles.createButton}>Crear Empresa</button>
+                </form>
+              </div>
+              <div style={styles.listCard}>
+                <div style={styles.cardHeader}>
+                  <h3 style={styles.cardTitle}>📋 Empresas Registradas</h3>
+                </div>
+                {empresas.length === 0 ? (
+                  <p style={styles.emptyText}>No hay empresas aún</p>
+                ) : (
+                  <ul style={styles.patientList}>
+                    {empresas.map(emp => (
+                      <li key={emp.id} style={styles.userItem}>
+                        <div style={styles.userInfo}>
+                          {emp.logo_url && (
+                            <img src={emp.logo_url} alt={emp.nombre} style={{ height: '32px', objectFit: 'contain' }} />
+                          )}
+                          <strong>{emp.nombre}</strong>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Dashboard - Admin y Médico */}
         {(usuario.rol === 'admin' || usuario.rol === 'medico') && (
           <div style={styles.dashboardSection}>
@@ -1329,7 +1489,7 @@ function App() {
                 📊 Exportar
               </button>
             </div>
-            <Dashboard />
+            <Dashboard empresaId={usuario.empresa_id} />
           </div>
         )}
 
@@ -1831,11 +1991,16 @@ const styles = {
     gap: '20px',
     flexWrap: 'wrap',
   },
-  headerTitle: { 
+  headerTitle: {
     fontSize: '22px',
     fontWeight: '800',
     color: '#1a5bbf',
     letterSpacing: '-0.5px',
+  },
+  headerLogo: {
+    height: '36px',
+    maxWidth: '180px',
+    objectFit: 'contain',
   },
   headerRole: { 
     fontSize: '15px',

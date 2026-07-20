@@ -26,7 +26,7 @@ ChartJS.register(
   LineElement
 );
 
-function Dashboard() {
+function Dashboard({ empresaId }) {
   const [estadisticas, setEstadisticas] = useState(null);
   const [topMotivos, setTopMotivos] = useState([]);
   const [topAreas, setTopAreas] = useState([]);
@@ -37,17 +37,20 @@ function Dashboard() {
   const API_URL = 'https://bo-synergy-backend.onrender.com/api';
 
   useEffect(() => {
+    if (!empresaId) return;
     cargarDatos();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresaId]);
 
   const cargarDatos = async () => {
     try {
+      const params = { empresa_id: empresaId };
       const [statsRes, motivosRes, areasRes, mesRes, pacientesAreaRes] = await Promise.all([
-        axios.get(`${API_URL}/estadisticas`),
-        axios.get(`${API_URL}/top-motivos`),
-        axios.get(`${API_URL}/top-areas`),
-        axios.get(`${API_URL}/consultas-por-mes`),
-        axios.get(`${API_URL}/pacientes-por-area`),
+        axios.get(`${API_URL}/estadisticas`, { params }),
+        axios.get(`${API_URL}/top-motivos`, { params }),
+        axios.get(`${API_URL}/top-areas`, { params }),
+        axios.get(`${API_URL}/consultas-por-mes`, { params }),
+        axios.get(`${API_URL}/pacientes-por-area`, { params }),
       ]);
 
       setEstadisticas(statsRes.data);

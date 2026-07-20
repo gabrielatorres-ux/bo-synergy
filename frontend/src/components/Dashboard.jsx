@@ -68,12 +68,12 @@ function Dashboard({ empresaId }) {
   if (cargando) {
     return (
       <div style={styles.loading}>
-        <h2>📊 Cargando estadísticas...</h2>
+        <h2>Cargando estadísticas...</h2>
       </div>
     );
   }
 
-  const colores = ['#2c7be5', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6f42c1', '#e83e8c', '#fd7e14'];
+  const colores = ['#2F6844', '#D9663D', '#C9922E', '#5B7C99', '#8B6F9E', '#6E8B5E', '#B08C5A', '#4A6C7A'];
 
   const motivosData = {
     labels: topMotivos.map(item => item.motivo.length > 20 ? item.motivo.substring(0, 20) + '...' : item.motivo),
@@ -105,9 +105,9 @@ function Dashboard({ empresaId }) {
     labels: pacientesPorArea.map(item => item.area),
     datasets: [
       {
-        label: 'Pacientes por Área',
+        label: 'Pacientes por área',
         data: pacientesPorArea.map(item => item.count),
-        backgroundColor: ['#2c7be5', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6f42c1'],
+        backgroundColor: colores.slice(0, pacientesPorArea.length),
         borderColor: '#fff',
         borderWidth: 2,
       },
@@ -120,8 +120,8 @@ function Dashboard({ empresaId }) {
       {
         label: 'Consultas por mes',
         data: consultasPorMes.map(item => item.count).reverse(),
-        borderColor: '#2c7be5',
-        backgroundColor: 'rgba(44, 123, 229, 0.1)',
+        borderColor: '#2F6844',
+        backgroundColor: 'rgba(47, 104, 68, 0.08)',
         tension: 0.4,
         fill: true,
       },
@@ -130,32 +130,28 @@ function Dashboard({ empresaId }) {
 
   return (
     <div style={styles.container}>
-      <h2 style={styles.title}>📊 Dashboard de Estadísticas</h2>
+      <h2 style={styles.title}>Dashboard de estadísticas</h2>
 
       <div style={styles.statsGrid}>
         <div style={styles.statCard}>
-          <span style={styles.statIcon}>👤</span>
           <div>
             <h3 style={styles.statNumber}>{estadisticas?.totalPacientes || 0}</h3>
             <p style={styles.statLabel}>Pacientes</p>
           </div>
         </div>
         <div style={styles.statCard}>
-          <span style={styles.statIcon}>📋</span>
           <div>
             <h3 style={styles.statNumber}>{estadisticas?.totalConsultas || 0}</h3>
             <p style={styles.statLabel}>Consultas</p>
           </div>
         </div>
         <div style={styles.statCard}>
-          <span style={styles.statIcon}>🩺</span>
           <div>
             <h3 style={styles.statNumber}>{(estadisticas?.totalEMI || 0) + (estadisticas?.totalEMP || 0) + (estadisticas?.totalEMR || 0)}</h3>
             <p style={styles.statLabel}>Exámenes</p>
           </div>
         </div>
         <div style={styles.statCard}>
-          <span style={styles.statIcon}>⚠️</span>
           <div>
             <h3 style={styles.statNumber}>{estadisticas?.totalVulnerabilidad || 0}</h3>
             <p style={styles.statLabel}>Vulnerabilidades</p>
@@ -165,7 +161,7 @@ function Dashboard({ empresaId }) {
 
       <div style={styles.chartsGrid}>
         <div style={styles.chartCard}>
-          <h4>🏆 Top 5 Motivos de Consulta</h4>
+          <h4 style={styles.chartTitle}>Top 5 motivos de consulta</h4>
           {topMotivos.length > 0 ? (
             <Bar data={motivosData} options={styles.chartOptions} />
           ) : (
@@ -174,7 +170,7 @@ function Dashboard({ empresaId }) {
         </div>
 
         <div style={styles.chartCard}>
-          <h4>🏢 Top 5 Áreas Consultantes</h4>
+          <h4 style={styles.chartTitle}>Top 5 áreas consultantes</h4>
           {topAreas.length > 0 ? (
             <Bar data={areasData} options={styles.chartOptions} />
           ) : (
@@ -183,7 +179,7 @@ function Dashboard({ empresaId }) {
         </div>
 
         <div style={styles.chartCard}>
-          <h4>📈 Consultas por Mes</h4>
+          <h4 style={styles.chartTitle}>Consultas por mes</h4>
           {consultasPorMes.length > 0 ? (
             <Line data={mesData} options={{ ...styles.chartOptions, responsive: true }} />
           ) : (
@@ -192,7 +188,7 @@ function Dashboard({ empresaId }) {
         </div>
 
         <div style={styles.chartCard}>
-          <h4>👥 Pacientes por Área</h4>
+          <h4 style={styles.chartTitle}>Pacientes por área</h4>
           {pacientesPorArea.length > 0 ? (
             <Pie data={pacientesAreaData} options={{ responsive: true }} />
           ) : (
@@ -207,10 +203,12 @@ function Dashboard({ empresaId }) {
 const styles = {
   container: {
     padding: '20px',
-    fontFamily: 'Arial, sans-serif',
+    fontFamily: "'Work Sans', -apple-system, sans-serif",
   },
   title: {
-    color: '#1a5bbf',
+    fontFamily: "'Fraunces', Georgia, serif",
+    fontWeight: '500',
+    color: '#1A1A18',
     marginBottom: '24px',
   },
   loading: {
@@ -219,7 +217,7 @@ const styles = {
     alignItems: 'center',
     minHeight: '200px',
     fontSize: '18px',
-    color: '#666',
+    color: '#8A8A85',
   },
   statsGrid: {
     display: 'grid',
@@ -230,25 +228,22 @@ const styles = {
   statCard: {
     background: 'white',
     padding: '20px',
-    borderRadius: '12px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+    borderRadius: '4px',
+    border: '1px solid #EEEEEE',
     display: 'flex',
     alignItems: 'center',
     gap: '16px',
   },
-  statIcon: {
-    fontSize: '32px',
-  },
   statNumber: {
     margin: 0,
     fontSize: '28px',
-    fontWeight: 'bold',
-    color: '#1a5bbf',
+    fontWeight: '500',
+    color: '#2F6844',
   },
   statLabel: {
     margin: 0,
-    fontSize: '14px',
-    color: '#666',
+    fontSize: '13px',
+    color: '#8A8A85',
   },
   chartsGrid: {
     display: 'grid',
@@ -258,8 +253,14 @@ const styles = {
   chartCard: {
     background: 'white',
     padding: '20px',
-    borderRadius: '12px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+    borderRadius: '4px',
+    border: '1px solid #EEEEEE',
+  },
+  chartTitle: {
+    fontFamily: "'Fraunces', Georgia, serif",
+    fontWeight: '500',
+    color: '#1A1A18',
+    marginTop: 0,
   },
   chartOptions: {
     responsive: true,
@@ -271,7 +272,7 @@ const styles = {
   },
   noData: {
     textAlign: 'center',
-    color: '#999',
+    color: '#B3B3AD',
     padding: '40px 0',
   },
 };

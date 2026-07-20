@@ -166,7 +166,7 @@ function App() {
       await axios.post(`${API_URL}/empresas/solicitar-registro`, data);
       setRegistroEnviado(true);
     } catch (error) {
-      toast.error(`❌ ${error.response?.data?.error || 'Error al enviar la solicitud'}`);
+      toast.error(`${error.response?.data?.error || 'Error al enviar la solicitud'}`);
     }
   };
 
@@ -213,7 +213,7 @@ function App() {
     e.preventDefault();
     try {
       await api.post(`${API_URL}/pacientes`, formData);
-      toast.success('✅ Paciente agregado');
+      toast.success('Paciente agregado');
       setFormData({
         num_empleado: '',
         nombre: '',
@@ -226,7 +226,7 @@ function App() {
       });
       cargarPacientes(paginaPacientes);
     } catch (error) {
-      toast.error('❌ Error al agregar paciente');
+      toast.error('Error al agregar paciente');
       console.error(error);
     }
   };
@@ -235,10 +235,10 @@ function App() {
     if (!confirm(`¿Estás seguro de eliminar al paciente ${nombre}?`)) return;
     try {
       await api.delete(`${API_URL}/pacientes/${id}`);
-      toast.success('✅ Paciente eliminado correctamente');
+      toast.success('Paciente eliminado correctamente');
       cargarPacientes(paginaPacientes);
     } catch (error) {
-      toast.error('❌ Error al eliminar paciente');
+      toast.error('Error al eliminar paciente');
     }
   };
 
@@ -261,7 +261,7 @@ function App() {
     e.preventDefault();
     try {
       await api.put(`${API_URL}/pacientes/${pacienteEditando.id}`, formData);
-      toast.success('✅ Paciente actualizado correctamente');
+      toast.success('Paciente actualizado correctamente');
       setMostrarModalEditar(false);
       setPacienteEditando(null);
       setFormData({
@@ -276,7 +276,7 @@ function App() {
       });
       cargarPacientes(paginaPacientes);
     } catch (error) {
-      toast.error('❌ Error al actualizar paciente');
+      toast.error('Error al actualizar paciente');
     }
   };
 
@@ -295,8 +295,8 @@ function App() {
     setMensajeUsuario('');
     try {
       const response = await api.post(`${API_URL}/usuarios`, nuevoUsuario);
-      toast.success(`✅ Usuario ${nuevoUsuario.nombre} creado correctamente`);
-      setMensajeUsuario(`✅ ${response.data.message}`);
+      toast.success(`Usuario ${nuevoUsuario.nombre} creado correctamente`);
+      setMensajeUsuario(`${response.data.message}`);
       setNuevoUsuario({
         num_empleado: '',
         nombre: '',
@@ -305,30 +305,30 @@ function App() {
       });
       cargarUsuarios();
     } catch (error) {
-      toast.error('❌ Error al crear usuario');
+      toast.error('Error al crear usuario');
       if (error.response) {
-        setMensajeUsuario(`❌ ${error.response.data.error}`);
+        setMensajeUsuario(`${error.response.data.error}`);
       } else {
-        setMensajeUsuario('❌ Error al crear usuario');
+        setMensajeUsuario('Error al crear usuario');
       }
     }
   };
 
   const handleEliminarUsuario = async (id, numEmpleado) => {
     if (numEmpleado === 'ADMIN001') {
-      toast.error('❌ No se puede eliminar al administrador principal');
+      toast.error('No se puede eliminar al administrador principal');
       return;
     }
     if (!confirm(`¿Eliminar al usuario ${numEmpleado}?`)) return;
     try {
       await api.delete(`${API_URL}/usuarios/${id}`);
-      setMensajeUsuario('✅ Usuario eliminado correctamente');
+      setMensajeUsuario('Usuario eliminado correctamente');
       cargarUsuarios();
     } catch (error) {
       if (error.response) {
-        setMensajeUsuario(`❌ ${error.response.data.error}`);
+        setMensajeUsuario(`${error.response.data.error}`);
       } else {
-        setMensajeUsuario('❌ Error al eliminar usuario');
+        setMensajeUsuario('Error al eliminar usuario');
       }
     }
   };
@@ -360,23 +360,23 @@ function App() {
       data.append('admin_password', nuevaEmpresaAdmin.password);
       if (nuevaEmpresaLogo) data.append('logo', nuevaEmpresaLogo);
       await api.post(`${API_URL}/empresas`, data);
-      toast.success('✅ Empresa y administrador creados correctamente');
+      toast.success('Empresa y administrador creados correctamente');
       setNuevaEmpresaNombre('');
       setNuevaEmpresaLogo(null);
       setNuevaEmpresaAdmin({ num_empleado: '', nombre: '', password: '' });
       cargarEmpresas();
     } catch (error) {
-      toast.error(`❌ ${error.response?.data?.error || 'Error al crear empresa'}`);
+      toast.error(`${error.response?.data?.error || 'Error al crear empresa'}`);
     }
   };
 
   const handleAprobarEmpresa = async (id) => {
     try {
       await api.patch(`${API_URL}/empresas/${id}/aprobar`);
-      toast.success('✅ Empresa aprobada correctamente');
+      toast.success('Empresa aprobada correctamente');
       cargarEmpresas();
     } catch (error) {
-      toast.error('❌ Error al aprobar empresa');
+      toast.error('Error al aprobar empresa');
     }
   };
 
@@ -384,10 +384,10 @@ function App() {
     if (!confirm(`¿Estás seguro de eliminar la empresa ${nombre}? Esto también elimina a sus usuarios.`)) return;
     try {
       await api.delete(`${API_URL}/empresas/${id}`);
-      toast.success('✅ Empresa eliminada correctamente');
+      toast.success('Empresa eliminada correctamente');
       cargarEmpresas();
     } catch (error) {
-      toast.error(`❌ ${error.response?.data?.error || 'Error al eliminar empresa'}`);
+      toast.error(`${error.response?.data?.error || 'Error al eliminar empresa'}`);
     }
   };
 
@@ -398,10 +398,10 @@ function App() {
       data.append('nombre', miEmpresaNombre || usuario.empresa_nombre);
       if (miEmpresaLogo) data.append('logo', miEmpresaLogo);
       await api.put(`${API_URL}/empresas/${usuario.empresa_id}`, data);
-      toast.success('✅ Empresa actualizada. Cierra sesión y vuelve a entrar para ver los cambios reflejados.');
+      toast.success('Empresa actualizada. Cierra sesión y vuelve a entrar para ver los cambios reflejados.');
       setMiEmpresaLogo(null);
     } catch (error) {
-      toast.error('❌ Error al actualizar tu empresa');
+      toast.error('Error al actualizar tu empresa');
     }
   };
 
@@ -456,7 +456,7 @@ function App() {
         ...consultaForm,
         paciente_id: pacienteSeleccionado.id
       });
-      setMensajeConsulta('✅ Consulta registrada correctamente');
+      setMensajeConsulta('Consulta registrada correctamente');
       const response = await api.get(`${API_URL}/consultas/${pacienteSeleccionado.id}`);
       setConsultasPaciente(response.data);
       setConsultaForm({
@@ -478,7 +478,7 @@ function App() {
         cie10: ''
       });
     } catch (error) {
-      setMensajeConsulta('❌ Error al registrar consulta');
+      setMensajeConsulta('Error al registrar consulta');
       console.error(error);
     }
   };
@@ -487,11 +487,11 @@ function App() {
     if (!confirm(`¿Eliminar esta consulta?`)) return;
     try {
       await api.delete(`${API_URL}/consultas/${id}`);
-      toast.success('✅ Consulta eliminada correctamente');
+      toast.success('Consulta eliminada correctamente');
       const response = await api.get(`${API_URL}/consultas/${pacienteSeleccionado.id}`);
       setConsultasPaciente(response.data);
     } catch (error) {
-      toast.error('❌ Error al eliminar consulta');
+      toast.error('Error al eliminar consulta');
     }
   };
 
@@ -525,7 +525,7 @@ function App() {
         ...consultaForm,
         paciente_id: pacienteSeleccionado.id
       });
-      toast.success('✅ Consulta actualizada correctamente');
+      toast.success('Consulta actualizada correctamente');
       setMostrarModalEditarConsulta(false);
       setConsultaEditando(null);
       const response = await api.get(`${API_URL}/consultas/${pacienteSeleccionado.id}`);
@@ -549,7 +549,7 @@ function App() {
         cie10: ''
       });
     } catch (error) {
-      toast.error('❌ Error al actualizar consulta');
+      toast.error('Error al actualizar consulta');
     }
   };
 
@@ -663,7 +663,7 @@ function App() {
         ...examenForm,
         paciente_id: pacienteSeleccionado.id
       });
-      setMensajeExamen(`✅ ${tipoExamen.toUpperCase()} registrado correctamente`);
+      setMensajeExamen(`${tipoExamen.toUpperCase()} registrado correctamente`);
       const response = await api.get(`${API_URL}/${tipoExamen}/${pacienteSeleccionado.id}`);
       setExamenesPaciente(response.data);
       setExamenForm({
@@ -675,7 +675,7 @@ function App() {
         agudeza_visual: ''
       });
     } catch (error) {
-      setMensajeExamen(`❌ Error al registrar ${tipoExamen.toUpperCase()}`);
+      setMensajeExamen(`Error al registrar ${tipoExamen.toUpperCase()}`);
       console.error(error);
     }
   };
@@ -686,7 +686,7 @@ function App() {
     const fecha = new Date().toLocaleDateString('es-MX');
     
     doc.setFontSize(18);
-    doc.text(`🏥 ${usuario?.empresa_nombre || 'BO Synergy'}`, 105, 20, { align: 'center' });
+    doc.text(`${usuario?.empresa_nombre || 'BO Synergy'}`, 105, 20, { align: 'center' });
     doc.setFontSize(14);
     doc.text('CONSTANCIA DE CONSULTA', 105, 30, { align: 'center' });
     doc.line(20, 35, 190, 35);
@@ -756,7 +756,7 @@ function App() {
     const fecha = new Date().toLocaleDateString('es-MX');
 
     doc.setFontSize(20);
-    doc.text(`🏥 ${usuario?.empresa_nombre || 'BO Synergy'}`, 105, 20, { align: 'center' });
+    doc.text(`${usuario?.empresa_nombre || 'BO Synergy'}`, 105, 20, { align: 'center' });
     doc.setFontSize(16);
     doc.text('R E C E T A   M É D I C A', 105, 30, { align: 'center' });
     doc.line(20, 35, 190, 35);
@@ -806,7 +806,7 @@ function App() {
     const fecha = new Date().toLocaleDateString('es-MX');
     
     doc.setFontSize(18);
-    doc.text(`🏥 ${usuario?.empresa_nombre || 'BO Synergy'}`, 105, 20, { align: 'center' });
+    doc.text(`${usuario?.empresa_nombre || 'BO Synergy'}`, 105, 20, { align: 'center' });
     doc.setFontSize(14);
     doc.text('REPORTE DE INCAPACIDAD', 105, 30, { align: 'center' });
     doc.line(20, 35, 190, 35);
@@ -847,12 +847,12 @@ function App() {
       });
       pacientesAExportar = response.data.pacientes;
     } catch (error) {
-      toast.error('❌ Error al obtener pacientes para exportar');
+      toast.error('Error al obtener pacientes para exportar');
       return;
     }
 
     if (pacientesAExportar.length === 0) {
-      toast.error('❌ No hay pacientes para exportar');
+      toast.error('No hay pacientes para exportar');
       return;
     }
 
@@ -878,12 +878,12 @@ function App() {
     ws['!cols'] = colWidths;
 
     XLSX.writeFile(wb, `Pacientes_${new Date().toISOString().split('T')[0]}.xlsx`);
-    toast.success(`✅ ${pacientesAExportar.length} pacientes exportados correctamente`);
+    toast.success(`${pacientesAExportar.length} pacientes exportados correctamente`);
   };
 
   const exportarConsultasExcel = () => {
     if (consultasPaciente.length === 0) {
-      toast.error('❌ No hay consultas para exportar');
+      toast.error('No hay consultas para exportar');
       return;
     }
 
@@ -918,7 +918,7 @@ function App() {
     ws['!cols'] = colWidths;
 
     XLSX.writeFile(wb, `Consultas_${pacienteSeleccionado?.nombre || 'paciente'}_${new Date().toISOString().split('T')[0]}.xlsx`);
-    toast.success(`✅ ${consultasPaciente.length} consultas exportadas correctamente`);
+    toast.success(`${consultasPaciente.length} consultas exportadas correctamente`);
   };
 
   const exportarEstadisticasExcel = async () => {
@@ -938,7 +938,7 @@ function App() {
       const wb = XLSX.utils.book_new();
 
       const resumenData = [
-        ['📊 RESUMEN DE ESTADÍSTICAS'],
+        ['RESUMEN DE ESTADÍSTICAS'],
         [''],
         ['Métrica', 'Valor'],
         ['Total Pacientes', stats.totalPacientes || 0],
@@ -954,7 +954,7 @@ function App() {
 
       if (motivos.length > 0) {
         const motivosData = [
-          ['🏆 TOP 5 MOTIVOS DE CONSULTA'],
+          ['TOP 5 MOTIVOS DE CONSULTA'],
           [''],
           ['Motivo', 'Cantidad']
         ];
@@ -967,7 +967,7 @@ function App() {
 
       if (areas.length > 0) {
         const areasData = [
-          ['🏢 TOP 5 ÁREAS CONSULTANTES'],
+          ['TOP 5 ÁREAS CONSULTANTES'],
           [''],
           ['Área', 'Cantidad']
         ];
@@ -980,7 +980,7 @@ function App() {
 
       if (pacientesArea.length > 0) {
         const pacientesAreaData = [
-          ['👥 PACIENTES POR ÁREA'],
+          ['PACIENTES POR ÁREA'],
           [''],
           ['Área', 'Cantidad']
         ];
@@ -992,16 +992,16 @@ function App() {
       }
 
       XLSX.writeFile(wb, `Estadisticas_BO_Synergy_${new Date().toISOString().split('T')[0]}.xlsx`);
-      toast.success('✅ Estadísticas exportadas correctamente');
+      toast.success('Estadísticas exportadas correctamente');
     } catch (error) {
       console.error('Error al exportar estadísticas:', error);
-      toast.error('❌ Error al exportar estadísticas');
+      toast.error('Error al exportar estadísticas');
     }
   };
 
   const exportarUsuariosExcel = () => {
     if (usuarios.length === 0) {
-      toast.error('❌ No hay usuarios para exportar');
+      toast.error('No hay usuarios para exportar');
       return;
     }
 
@@ -1022,16 +1022,16 @@ function App() {
     ws['!cols'] = colWidths;
 
     XLSX.writeFile(wb, `Usuarios_${new Date().toISOString().split('T')[0]}.xlsx`);
-    toast.success(`✅ ${usuarios.length} usuarios exportados correctamente`);
+    toast.success(`${usuarios.length} usuarios exportados correctamente`);
   };
 
     // ===== FUNCIONES DE ENVÍO DE CORREOS =====
     const enviarCorreoPDF = async (consulta, paciente, tipo) => {
-    const destinatario = prompt('📧 Ingresa el correo electrónico del destinatario:');
+    const destinatario = prompt('Ingresa el correo electrónico del destinatario:');
     if (!destinatario) return;
     
     if (!destinatario.includes('@') || !destinatario.includes('.')) {
-      toast.error('❌ Correo electrónico inválido');
+      toast.error('Correo electrónico inválido');
       return;
     }
 
@@ -1040,7 +1040,7 @@ function App() {
       const fecha = new Date().toLocaleDateString('es-MX');
       
       doc.setFontSize(18);
-      doc.text(`🏥 ${usuario?.empresa_nombre || 'BO Synergy'}`, 105, 20, { align: 'center' });
+      doc.text(`${usuario?.empresa_nombre || 'BO Synergy'}`, 105, 20, { align: 'center' });
       doc.setFontSize(14);
 
       if (tipo === 'constancia') {
@@ -1143,11 +1143,11 @@ function App() {
       });
       
       if (response.data.success) {
-        toast.success(`✅ ${tipo.charAt(0).toUpperCase() + tipo.slice(1)} enviada por correo a ${destinatario}`);
+        toast.success(`${tipo.charAt(0).toUpperCase() + tipo.slice(1)} enviada por correo a ${destinatario}`);
       }
     } catch (error) {
       console.error('Error al enviar correo:', error);
-      toast.error('❌ Error al enviar el correo. Verifica tu conexión.');
+      toast.error('Error al enviar el correo. Verifica tu conexión.');
     }
   };
 
@@ -1161,41 +1161,41 @@ function App() {
             duration: 4000,
             style: {
               background: '#fff',
-              color: '#333',
-              padding: '16px',
-              borderRadius: '8px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              fontFamily: 'Arial, sans-serif',
+              color: '#1A1A18',
+              padding: '14px 16px',
+              borderRadius: '4px',
+              border: '1px solid #EEEEEE',
+              fontFamily: "'Work Sans', sans-serif",
               fontSize: '14px'
             },
             success: {
               duration: 3000,
               iconTheme: {
-                primary: '#28a745',
+                primary: '#2F6844',
                 secondary: '#fff',
               },
               style: {
-                borderLeft: '4px solid #28a745',
+                borderLeft: '4px solid #2F6844',
               },
             },
             error: {
               duration: 4000,
               iconTheme: {
-                primary: '#dc3545',
+                primary: '#B3261E',
                 secondary: '#fff',
               },
               style: {
-                borderLeft: '4px solid #dc3545',
+                borderLeft: '4px solid #B3261E',
               },
             },
             loading: {
               duration: 2000,
               iconTheme: {
-                primary: '#ffc107',
+                primary: '#C9922E',
                 secondary: '#fff',
               },
               style: {
-                borderLeft: '4px solid #ffc107',
+                borderLeft: '4px solid #C9922E',
               },
             },
           }}
@@ -1205,7 +1205,7 @@ function App() {
             {empresaLogin?.logo_url ? (
               <img src={empresaLogin.logo_url} alt={empresaLogin.nombre} style={styles.loginLogo} />
             ) : (
-              <h1 style={styles.title}>🏥 {empresaLogin?.nombre || 'BO Synergy'}</h1>
+              <h1 style={styles.title}>{empresaLogin?.nombre || 'BO Synergy'}</h1>
             )}
             <h2 style={styles.subtitle}>Salud Ocupacional</h2>
 
@@ -1213,7 +1213,7 @@ function App() {
               <>
                 <p style={styles.welcomeText}>Inicia sesión para continuar</p>
                 {errorLogin && (
-                  <div style={styles.errorBox}>❌ {errorLogin}</div>
+                  <div style={styles.errorBox}>{errorLogin}</div>
                 )}
                 <form onSubmit={handleLogin}>
                   <input type="text" placeholder="Número de empleado" value={numEmpleado} onChange={(e) => setNumEmpleado(e.target.value)} style={styles.input} required />
@@ -1221,7 +1221,7 @@ function App() {
                   <button type="submit" style={styles.loginButton}>Iniciar Sesión</button>
                 </form>
                 <div style={styles.testCredentials}>
-                  <p>👨‍💻 Usuarios de prueba:</p>
+                  <p>‍Usuarios de prueba:</p>
                   <p><strong>Admin:</strong> ADMIN001 / admin123</p>
                   <p><strong>Médico:</strong> MED001 / medico123</p>
                   <p><strong>Enfermera:</strong> ENF001 / enfermera123</p>
@@ -1235,7 +1235,7 @@ function App() {
               </>
             ) : registroEnviado ? (
               <div style={styles.mensajeBox}>
-                ✅ Tu solicitud fue enviada. Te avisaremos cuando tu cuenta esté aprobada.
+                Tu solicitud fue enviada. Te avisaremos cuando tu cuenta esté aprobada.
                 <p>
                   <a href="#" onClick={(e) => { e.preventDefault(); setMostrarRegistro(false); }}>
                     ← Volver al login
@@ -1302,37 +1302,37 @@ function App() {
           duration: 4000,
           style: {
             background: '#fff',
-            color: '#333',
-            padding: '16px',
-            borderRadius: '8px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            fontFamily: 'Inter, sans-serif',
+            color: '#1A1A18',
+            padding: '14px 16px',
+            borderRadius: '4px',
+            border: '1px solid #EEEEEE',
+            fontFamily: "'Work Sans', sans-serif",
             fontSize: '14px'
           },
           success: {
             duration: 3000,
             iconTheme: {
-              primary: '#28a745',
+              primary: '#2F6844',
               secondary: '#fff',
             },
             style: {
-              borderLeft: '4px solid #28a745',
+              borderLeft: '4px solid #2F6844',
             },
           },
           error: {
             duration: 4000,
             iconTheme: {
-              primary: '#dc3545',
+              primary: '#B3261E',
               secondary: '#fff',
             },
             style: {
-              borderLeft: '4px solid #dc3545',
+              borderLeft: '4px solid #B3261E',
             },
           },
           loading: {
             duration: 2000,
             style: {
-              borderLeft: '4px solid #ffc107',
+              borderLeft: '4px solid #C9922E',
             },
           },
         }}
@@ -1344,15 +1344,15 @@ function App() {
           {usuario.empresa_logo_url ? (
             <img src={usuario.empresa_logo_url} alt={usuario.empresa_nombre} style={styles.headerLogo} />
           ) : (
-            <span style={styles.headerTitle}>🏥 {usuario.empresa_nombre || 'BO Synergy'}</span>
+            <span style={styles.headerTitle}>{usuario.empresa_nombre || 'BO Synergy'}</span>
           )}
-          <span style={styles.headerRole}>👤 {usuario.nombre}</span>
+          <span style={styles.headerRole}>{usuario.nombre}</span>
           <span style={{
             ...styles.headerBadge,
-            background: usuario.rol === 'admin' ? '#dc3545' : usuario.rol === 'medico' ? '#28a745' : '#ffc107',
-            color: usuario.rol === 'enfermera' ? '#333' : 'white'
+            background: 'rgba(255,255,255,0.16)',
+            color: '#fff'
           }}>
-            {usuario.rol === 'admin' ? '👑 Admin' : usuario.rol === 'medico' ? '🩺 Médico' : '💉 Enfermera'}
+            {usuario.rol === 'admin' ? 'Admin' : usuario.rol === 'medico' ? 'Médico' : 'Enfermera'}
           </span>
         </div>
         <button onClick={handleLogout} style={styles.logoutButton}>Cerrar Sesión</button>
@@ -1363,13 +1363,13 @@ function App() {
         {/* Mensaje de bienvenida */}
         <div style={styles.welcomeSection}>
           {usuario.rol === 'admin' && (
-            <p style={styles.welcomeText}>👑 Bienvenido Administrador. Tienes acceso completo al sistema.</p>
+            <p style={styles.welcomeText}>Bienvenido Administrador. Tienes acceso completo al sistema.</p>
           )}
           {usuario.rol === 'medico' && (
-            <p style={styles.welcomeText}>🩺 Bienvenido Médico. Puedes gestionar pacientes, consultas y exámenes.</p>
+            <p style={styles.welcomeText}>Bienvenido Médico. Puedes gestionar pacientes, consultas y exámenes.</p>
           )}
           {usuario.rol === 'enfermera' && (
-            <p style={styles.welcomeText}>💉 Bienvenida Enfermera. Puedes gestionar pacientes y consultas.</p>
+            <p style={styles.welcomeText}>Bienvenida Enfermera. Puedes gestionar pacientes y consultas.</p>
           )}
         </div>
 
@@ -1378,7 +1378,7 @@ function App() {
           {/* Formulario de Pacientes */}
           <div style={styles.formCard}>
             <div style={styles.cardHeader}>
-              <h3 style={styles.cardTitle}>📝 Registrar Paciente</h3>
+              <h3 style={styles.cardTitle}>Registrar Paciente</h3>
             </div>
             <form onSubmit={handleSubmit} style={styles.cardForm}>
               <input name="num_empleado" placeholder="Número de empleado" value={formData.num_empleado} onChange={handleChange} style={styles.cardInput} required />
@@ -1396,14 +1396,14 @@ function App() {
           {/* Lista de Pacientes */}
           <div style={styles.listCard}>
             <div style={styles.cardHeader}>
-              <h3 style={styles.cardTitle}>📋 Pacientes Registrados</h3>
+              <h3 style={styles.cardTitle}>Pacientes Registrados</h3>
               <button onClick={exportarPacientesExcel} style={styles.exportButton}>
-                📊 Exportar Excel
+                Exportar Excel
               </button>
             </div>
             <input
               type="text"
-              placeholder="🔍 Buscar por nombre, número de empleado o área..."
+              placeholder="Buscar por nombre, número de empleado o área..."
               value={busquedaPaciente}
               onChange={(e) => setBusquedaPaciente(e.target.value)}
               style={styles.cardInput}
@@ -1424,7 +1424,7 @@ function App() {
                         </span>
                       </div>
                       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                        <button onClick={() => handleAbrirConsulta(p)} style={styles.consultaButton}>📋 Consulta</button>
+                        <button onClick={() => handleAbrirConsulta(p)} style={styles.consultaButton}>Consulta</button>
                         {(usuario.rol === 'admin' || usuario.rol === 'medico') && (
                           <>
                             <button onClick={() => handleAbrirExamen('emi', p)} style={styles.emiButton}>EMI</button>
@@ -1433,8 +1433,8 @@ function App() {
                             <button onClick={() => handleAbrirExamen('vulnerabilidad', p)} style={styles.vulnerabilidadButton}>Vuln</button>
                           </>
                         )}
-                        <button onClick={() => handleEditarPaciente(p)} style={styles.editButton}>✏️</button>
-                        <button onClick={() => handleEliminarPaciente(p.id, p.nombre)} style={styles.deleteButton}>🗑️</button>
+                        <button onClick={() => handleEditarPaciente(p)} style={styles.editButton}>Editar</button>
+                        <button onClick={() => handleEliminarPaciente(p.id, p.nombre)} style={styles.deleteButton}>Eliminar</button>
                       </div>
                     </div>
                   </li>
@@ -1466,12 +1466,12 @@ function App() {
         {/* Gestión de Usuarios - Solo Admin */}
         {usuario && usuario.rol === 'admin' && (
           <div style={styles.adminSection}>
-            <h2 style={styles.sectionTitle}>👥 Gestión de Usuarios</h2>
+            <h2 style={styles.sectionTitle}>Gestión de Usuarios</h2>
             {mensajeUsuario && (
               <div style={{
                 ...styles.mensajeBox,
-                background: mensajeUsuario.includes('✅') ? '#d4edda' : '#f8d7da',
-                color: mensajeUsuario.includes('✅') ? '#155724' : '#721c24'
+                background: mensajeUsuario.includes('') ? '#d4edda' : '#f8d7da',
+                color: mensajeUsuario.includes('') ? '#155724' : '#721c24'
               }}>
                 {mensajeUsuario}
               </div>
@@ -1479,7 +1479,7 @@ function App() {
             <div style={styles.adminGrid}>
               <div style={styles.formCard}>
                 <div style={styles.cardHeader}>
-                  <h3 style={styles.cardTitle}>➕ Crear Nuevo Usuario</h3>
+                  <h3 style={styles.cardTitle}>Crear Nuevo Usuario</h3>
                 </div>
                 <form onSubmit={handleCrearUsuario} style={styles.cardForm}>
                   <input name="num_empleado" placeholder="Número de empleado *" value={nuevoUsuario.num_empleado} onChange={handleCambioUsuario} style={styles.cardInput} required />
@@ -1495,9 +1495,9 @@ function App() {
               </div>
               <div style={styles.listCard}>
                 <div style={styles.cardHeader}>
-                  <h3 style={styles.cardTitle}>📋 Lista de Usuarios</h3>
+                  <h3 style={styles.cardTitle}>Lista de Usuarios</h3>
                   <button onClick={exportarUsuariosExcel} style={styles.exportButton}>
-                    📊 Exportar Excel
+                    Exportar Excel
                   </button>
                 </div>
                 {usuarios.length === 0 ? (
@@ -1511,14 +1511,14 @@ function App() {
                           <span style={styles.userDetail}>Empleado: {u.num_empleado}</span>
                           <span style={{
                             ...styles.roleBadge,
-                            background: u.rol === 'admin' ? '#dc3545' : u.rol === 'medico' ? '#28a745' : '#ffc107',
-                            color: u.rol === 'enfermera' ? '#333' : 'white'
+                            background: u.rol === 'admin' ? '#2F6844' : u.rol === 'medico' ? '#D9663D' : '#C9922E',
+                            color: '#fff'
                           }}>
-                            {u.rol === 'admin' ? '👑 Admin' : u.rol === 'medico' ? '🩺 Médico' : '💉 Enfermera'}
+                            {u.rol === 'admin' ? 'Admin' : u.rol === 'medico' ? 'Médico' : 'Enfermera'}
                           </span>
-                          <span style={styles.userDate}>📅 {new Date(u.fecha_registro).toLocaleDateString('es-MX')}</span>
+                          <span style={styles.userDate}>{new Date(u.fecha_registro).toLocaleDateString('es-MX')}</span>
                         </div>
-                        <button onClick={() => handleEliminarUsuario(u.id, u.num_empleado)} style={styles.deleteButton} disabled={u.num_empleado === 'ADMIN001'}>🗑️</button>
+                        <button onClick={() => handleEliminarUsuario(u.id, u.num_empleado)} style={styles.deleteButton} disabled={u.num_empleado === 'ADMIN001'}>Eliminar</button>
                       </li>
                     ))}
                   </ul>
@@ -1531,7 +1531,7 @@ function App() {
         {/* Mi Empresa - cualquier admin edita el nombre/logo de su propia empresa */}
         {usuario.rol === 'admin' && (
           <div style={styles.adminSection}>
-            <h2 style={styles.sectionTitle}>🏢 Mi Empresa</h2>
+            <h2 style={styles.sectionTitle}>Mi Empresa</h2>
             <div style={styles.formCard}>
               <form onSubmit={handleActualizarMiEmpresa} style={styles.cardForm}>
                 <input
@@ -1554,7 +1554,7 @@ function App() {
               </form>
               {usuario.empresa_slug && (
                 <p style={styles.patientInfo}>
-                  🔗 Link de acceso para tu equipo: <strong>{window.location.origin}/login/{usuario.empresa_slug}</strong>
+                  Link de acceso para tu equipo: <strong>{window.location.origin}/login/{usuario.empresa_slug}</strong>
                 </p>
               )}
             </div>
@@ -1564,11 +1564,11 @@ function App() {
         {/* Gestión de Empresas - Solo Superadmin */}
         {usuario.es_superadmin && (
           <div style={styles.adminSection}>
-            <h2 style={styles.sectionTitle}>🏢 Gestión de Empresas</h2>
+            <h2 style={styles.sectionTitle}>Gestión de Empresas</h2>
             <div style={styles.adminGrid}>
               <div style={styles.formCard}>
                 <div style={styles.cardHeader}>
-                  <h3 style={styles.cardTitle}>➕ Dar de Alta Empresa</h3>
+                  <h3 style={styles.cardTitle}>Dar de Alta Empresa</h3>
                 </div>
                 <form onSubmit={handleCrearEmpresa} style={styles.cardForm}>
                   <input
@@ -1612,7 +1612,7 @@ function App() {
               </div>
               <div style={styles.listCard}>
                 <div style={styles.cardHeader}>
-                  <h3 style={styles.cardTitle}>📋 Empresas Registradas</h3>
+                  <h3 style={styles.cardTitle}>Empresas Registradas</h3>
                 </div>
                 {empresas.length === 0 ? (
                   <p style={styles.emptyText}>No hay empresas aún</p>
@@ -1626,15 +1626,15 @@ function App() {
                           )}
                           <strong>{emp.nombre}</strong>
                           {!emp.activo && (
-                            <span style={{ ...styles.roleBadge, background: '#ffc107', color: '#333' }}>⏳ Pendiente</span>
+                            <span style={{ ...styles.roleBadge, background: '#C9922E', color: '#fff' }}>Pendiente</span>
                           )}
                           <span style={styles.userDetail}>{window.location.origin}/login/{emp.slug}</span>
                         </div>
                         <div style={{ display: 'flex', gap: '4px' }}>
                           {!emp.activo && (
-                            <button onClick={() => handleAprobarEmpresa(emp.id)} style={styles.createButton}>✅ Aprobar</button>
+                            <button onClick={() => handleAprobarEmpresa(emp.id)} style={styles.createButton}>Aprobar</button>
                           )}
-                          <button onClick={() => handleEliminarEmpresa(emp.id, emp.nombre)} style={styles.deleteButton}>🗑️</button>
+                          <button onClick={() => handleEliminarEmpresa(emp.id, emp.nombre)} style={styles.deleteButton}>Eliminar</button>
                         </div>
                       </li>
                     ))}
@@ -1649,9 +1649,9 @@ function App() {
         {(usuario.rol === 'admin' || usuario.rol === 'medico') && (
           <div style={styles.dashboardSection}>
             <div style={styles.cardHeader}>
-              <h3 style={styles.cardTitle}>📊 Dashboard de Estadísticas</h3>
+              <h3 style={styles.cardTitle}>Dashboard de Estadísticas</h3>
               <button onClick={exportarEstadisticasExcel} style={styles.exportButton}>
-                📊 Exportar
+                Exportar
               </button>
             </div>
             <Dashboard empresaId={usuario.empresa_id} />
@@ -1664,7 +1664,7 @@ function App() {
           <div style={styles.modalOverlay}>
             <div style={styles.modalContent}>
               <div style={styles.modalHeader}>
-                <h2>✏️ Editar Paciente</h2>
+                <h2>Editar Paciente</h2>
                 <button onClick={() => setMostrarModalEditar(false)} style={styles.closeButton}>✕</button>
               </div>
               <form onSubmit={handleActualizarPaciente} style={styles.cardForm}>
@@ -1691,7 +1691,7 @@ function App() {
             <div style={styles.modalContent}>
               <div style={styles.modalHeader}>
                 <div>
-                  <h2>📋 Consulta Diaria</h2>
+                  <h2>Consulta Diaria</h2>
                   <h3>Paciente: {pacienteSeleccionado.nombre}</h3>
                 </div>
                 <button onClick={handleCerrarConsulta} style={styles.closeButton}>✕</button>
@@ -1700,8 +1700,8 @@ function App() {
               {mensajeConsulta && (
                 <div style={{
                   ...styles.mensajeBox,
-                  background: mensajeConsulta.includes('✅') ? '#d4edda' : '#f8d7da',
-                  color: mensajeConsulta.includes('✅') ? '#155724' : '#721c24'
+                  background: mensajeConsulta.includes('') ? '#d4edda' : '#f8d7da',
+                  color: mensajeConsulta.includes('') ? '#155724' : '#721c24'
                 }}>
                   {mensajeConsulta}
                 </div>
@@ -1710,11 +1710,11 @@ function App() {
               <form onSubmit={handleGuardarConsulta} style={styles.consultaForm}>
                 <div style={styles.formRow}>
                   <div style={styles.formGroup}>
-                    <label>📅 Fecha</label>
+                    <label>Fecha</label>
                     <input type="date" name="fecha" value={consultaForm.fecha} onChange={handleChangeConsulta} style={styles.cardInput} required />
                   </div>
                   <div style={styles.formGroup}>
-                    <label>🤧 ¿Tiene alergias?</label>
+                    <label>¿Tiene alergias?</label>
                     <select name="alergias" value={consultaForm.alergias} onChange={handleChangeConsulta} style={styles.select}>
                       <option value="no">No</option>
                       <option value="si">Sí</option>
@@ -1723,79 +1723,79 @@ function App() {
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label>📝 Motivo de consulta</label>
+                  <label>Motivo de consulta</label>
                   <textarea name="motivo" value={consultaForm.motivo} onChange={handleChangeConsulta} rows="2" placeholder="Describa el motivo..." style={styles.cardInput} required />
                 </div>
 
                 <div style={styles.formRow}>
                   <div style={styles.formGroup}>
-                    <label>👤 Cabeza</label>
+                    <label>Cabeza</label>
                     <input name="cabeza" value={consultaForm.cabeza} onChange={handleChangeConsulta} placeholder="Síntomas en cabeza" style={styles.cardInput} />
                   </div>
                   <div style={styles.formGroup}>
-                    <label>🦴 Cuello</label>
+                    <label>Cuello</label>
                     <input name="cuello" value={consultaForm.cuello} onChange={handleChangeConsulta} placeholder="Síntomas en cuello" style={styles.cardInput} />
                   </div>
                 </div>
 
                 <div style={styles.formRow}>
                   <div style={styles.formGroup}>
-                    <label>🫁 Tórax</label>
+                    <label>Tórax</label>
                     <input name="torax" value={consultaForm.torax} onChange={handleChangeConsulta} placeholder="Síntomas en tórax" style={styles.cardInput} />
                   </div>
                   <div style={styles.formGroup}>
-                    <label>🦵 Extremidades superiores</label>
+                    <label>Extremidades superiores</label>
                     <input name="extremidades_superiores" value={consultaForm.extremidades_superiores} onChange={handleChangeConsulta} placeholder="Brazo, hombro, mano" style={styles.cardInput} />
                   </div>
                 </div>
 
                 <div style={styles.formRow}>
                   <div style={styles.formGroup}>
-                    <label>🦶 Extremidades inferiores</label>
+                    <label>Extremidades inferiores</label>
                     <input name="extremidades_inferiores" value={consultaForm.extremidades_inferiores} onChange={handleChangeConsulta} placeholder="Pierna, pie" style={styles.cardInput} />
                   </div>
                   <div style={styles.formGroup}>
-                    <label>💪 Abdomen</label>
+                    <label>Abdomen</label>
                     <input name="abdomen" value={consultaForm.abdomen} onChange={handleChangeConsulta} placeholder="Síntomas en abdomen" style={styles.cardInput} />
                   </div>
                 </div>
 
                 <div style={styles.formRow}>
                   <div style={styles.formGroup}>
-                    <label>🔙 Espalda</label>
+                    <label>Espalda</label>
                     <input name="espalda" value={consultaForm.espalda} onChange={handleChangeConsulta} placeholder="Síntomas en espalda" style={styles.cardInput} />
                   </div>
                   <div style={styles.formGroup}>
-                    <label>👀 Ojos, Oídos o Garganta</label>
+                    <label>Ojos, Oídos o Garganta</label>
                     <input name="ojos_oidos_garganta" value={consultaForm.ojos_oidos_garganta} onChange={handleChangeConsulta} placeholder="Síntomas en ojos, oídos o garganta" style={styles.cardInput} />
                   </div>
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label>🔍 Describa cuál cree es la causa</label>
+                  <label>Describa cuál cree es la causa</label>
                   <textarea name="causa" value={consultaForm.causa} onChange={handleChangeConsulta} rows="2" placeholder="¿Qué cree que está causando los síntomas?" style={styles.cardInput} />
                 </div>
 
                 <div style={styles.formDivider}>--- Sección Médica ---</div>
 
                 <div style={styles.formGroup}>
-                  <label>🩺 Impresión Diagnóstica</label>
+                  <label>Impresión Diagnóstica</label>
                   <textarea name="impresion_diagnostica" value={consultaForm.impresion_diagnostica} onChange={handleChangeConsulta} rows="2" placeholder="Diagnóstico del médico" style={styles.cardInput} />
                 </div>
 
                 <div style={styles.formRow}>
                   <div style={styles.formGroup}>
-                    <label>💊 Medicamentos</label>
+                    <label>Medicamentos</label>
                     <input name="medicamentos" value={consultaForm.medicamentos} onChange={handleChangeConsulta} placeholder="Medicamentos recetados" style={styles.cardInput} />
                   </div>
                   <div style={styles.formGroup}>
-                    <label>📄 Receta</label>
+                    <label>Receta</label>
                     <input name="receta" value={consultaForm.receta} onChange={handleChangeConsulta} placeholder="Número de receta o detalles" style={styles.cardInput} />
                   </div>
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label>📋 CIE-10</label>
+                  <label>CIE-10</label>
                   <input name="cie10" value={consultaForm.cie10} onChange={handleChangeConsulta} placeholder="Código CIE-10" style={styles.cardInput} />
                 </div>
 
@@ -1808,9 +1808,9 @@ function App() {
               {consultasPaciente.length > 0 && (
                 <div style={styles.historialContainer}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <h4 style={{ margin: 0 }}>📜 Historial de Consultas</h4>
+                    <h4 style={{ margin: 0 }}>Historial de Consultas</h4>
                     <button onClick={exportarConsultasExcel} style={styles.exportButtonSmall}>
-                      📊 Exportar Excel
+                      Exportar Excel
                     </button>
                   </div>
                   <div style={styles.historialList}>
@@ -1825,18 +1825,18 @@ function App() {
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
                             <div style={{ display: 'flex', gap: '4px' }}>
-                              <button onClick={() => handleEditarConsulta(c)} style={styles.editButtonSmall}>✏️</button>
-                              <button onClick={() => handleEliminarConsulta(c.id)} style={styles.deleteButtonSmall}>🗑️</button>
+                              <button onClick={() => handleEditarConsulta(c)} style={styles.editButtonSmall}>Editar</button>
+                              <button onClick={() => handleEliminarConsulta(c.id)} style={styles.deleteButtonSmall}>Eliminar</button>
                             </div>
                             <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                              <button onClick={() => generarConstanciaPDF(c, pacienteSeleccionado)} style={styles.pdfButtonGreen}>📄 Constancia</button>
-                              <button onClick={() => generarRecetaPDF(c, pacienteSeleccionado)} style={styles.pdfButtonBlue}>💊 Receta</button>
-                              <button onClick={() => generarIncapacidadPDF(c, pacienteSeleccionado)} style={styles.pdfButtonOrange}>🏥 Incapacidad</button>
+                              <button onClick={() => generarConstanciaPDF(c, pacienteSeleccionado)} style={styles.pdfButtonGreen}>Constancia</button>
+                              <button onClick={() => generarRecetaPDF(c, pacienteSeleccionado)} style={styles.pdfButtonBlue}>Receta</button>
+                              <button onClick={() => generarIncapacidadPDF(c, pacienteSeleccionado)} style={styles.pdfButtonOrange}>Incapacidad</button>
                             </div>
                             <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
-                              <button onClick={() => enviarCorreoPDF(c, pacienteSeleccionado, 'constancia')} style={styles.emailButtonGreen}>✉️ Enviar Constancia</button>
-                              <button onClick={() => enviarCorreoPDF(c, pacienteSeleccionado, 'receta')} style={styles.emailButtonBlue}>✉️ Enviar Receta</button>
-                              <button onClick={() => enviarCorreoPDF(c, pacienteSeleccionado, 'incapacidad')} style={styles.emailButtonOrange}>✉️ Enviar Incapacidad</button>
+                              <button onClick={() => enviarCorreoPDF(c, pacienteSeleccionado, 'constancia')} style={styles.emailButtonGreen}>Enviar Constancia</button>
+                              <button onClick={() => enviarCorreoPDF(c, pacienteSeleccionado, 'receta')} style={styles.emailButtonBlue}>Enviar Receta</button>
+                              <button onClick={() => enviarCorreoPDF(c, pacienteSeleccionado, 'incapacidad')} style={styles.emailButtonOrange}>Enviar Incapacidad</button>
                             </div>
                           </div>
                         </div>
@@ -1854,17 +1854,17 @@ function App() {
           <div style={styles.modalOverlay}>
             <div style={styles.modalContent}>
               <div style={styles.modalHeader}>
-                <h2>✏️ Editar Consulta</h2>
+                <h2>Editar Consulta</h2>
                 <button onClick={() => setMostrarModalEditarConsulta(false)} style={styles.closeButton}>✕</button>
               </div>
               <form onSubmit={handleActualizarConsulta} style={styles.consultaForm}>
                 <div style={styles.formRow}>
                   <div style={styles.formGroup}>
-                    <label>📅 Fecha</label>
+                    <label>Fecha</label>
                     <input type="date" name="fecha" value={consultaForm.fecha} onChange={handleChangeConsulta} style={styles.cardInput} required />
                   </div>
                   <div style={styles.formGroup}>
-                    <label>🤧 ¿Tiene alergias?</label>
+                    <label>¿Tiene alergias?</label>
                     <select name="alergias" value={consultaForm.alergias} onChange={handleChangeConsulta} style={styles.select}>
                       <option value="no">No</option>
                       <option value="si">Sí</option>
@@ -1873,79 +1873,79 @@ function App() {
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label>📝 Motivo de consulta</label>
+                  <label>Motivo de consulta</label>
                   <textarea name="motivo" value={consultaForm.motivo} onChange={handleChangeConsulta} rows="2" placeholder="Describa el motivo..." style={styles.cardInput} required />
                 </div>
 
                 <div style={styles.formRow}>
                   <div style={styles.formGroup}>
-                    <label>👤 Cabeza</label>
+                    <label>Cabeza</label>
                     <input name="cabeza" value={consultaForm.cabeza} onChange={handleChangeConsulta} placeholder="Síntomas en cabeza" style={styles.cardInput} />
                   </div>
                   <div style={styles.formGroup}>
-                    <label>🦴 Cuello</label>
+                    <label>Cuello</label>
                     <input name="cuello" value={consultaForm.cuello} onChange={handleChangeConsulta} placeholder="Síntomas en cuello" style={styles.cardInput} />
                   </div>
                 </div>
 
                 <div style={styles.formRow}>
                   <div style={styles.formGroup}>
-                    <label>🫁 Tórax</label>
+                    <label>Tórax</label>
                     <input name="torax" value={consultaForm.torax} onChange={handleChangeConsulta} placeholder="Síntomas en tórax" style={styles.cardInput} />
                   </div>
                   <div style={styles.formGroup}>
-                    <label>🦵 Extremidades superiores</label>
+                    <label>Extremidades superiores</label>
                     <input name="extremidades_superiores" value={consultaForm.extremidades_superiores} onChange={handleChangeConsulta} placeholder="Brazo, hombro, mano" style={styles.cardInput} />
                   </div>
                 </div>
 
                 <div style={styles.formRow}>
                   <div style={styles.formGroup}>
-                    <label>🦶 Extremidades inferiores</label>
+                    <label>Extremidades inferiores</label>
                     <input name="extremidades_inferiores" value={consultaForm.extremidades_inferiores} onChange={handleChangeConsulta} placeholder="Pierna, pie" style={styles.cardInput} />
                   </div>
                   <div style={styles.formGroup}>
-                    <label>💪 Abdomen</label>
+                    <label>Abdomen</label>
                     <input name="abdomen" value={consultaForm.abdomen} onChange={handleChangeConsulta} placeholder="Síntomas en abdomen" style={styles.cardInput} />
                   </div>
                 </div>
 
                 <div style={styles.formRow}>
                   <div style={styles.formGroup}>
-                    <label>🔙 Espalda</label>
+                    <label>Espalda</label>
                     <input name="espalda" value={consultaForm.espalda} onChange={handleChangeConsulta} placeholder="Síntomas en espalda" style={styles.cardInput} />
                   </div>
                   <div style={styles.formGroup}>
-                    <label>👀 Ojos, Oídos o Garganta</label>
+                    <label>Ojos, Oídos o Garganta</label>
                     <input name="ojos_oidos_garganta" value={consultaForm.ojos_oidos_garganta} onChange={handleChangeConsulta} placeholder="Síntomas en ojos, oídos o garganta" style={styles.cardInput} />
                   </div>
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label>🔍 Describa cuál cree es la causa</label>
+                  <label>Describa cuál cree es la causa</label>
                   <textarea name="causa" value={consultaForm.causa} onChange={handleChangeConsulta} rows="2" placeholder="¿Qué cree que está causando los síntomas?" style={styles.cardInput} />
                 </div>
 
                 <div style={styles.formDivider}>--- Sección Médica ---</div>
 
                 <div style={styles.formGroup}>
-                  <label>🩺 Impresión Diagnóstica</label>
+                  <label>Impresión Diagnóstica</label>
                   <textarea name="impresion_diagnostica" value={consultaForm.impresion_diagnostica} onChange={handleChangeConsulta} rows="2" placeholder="Diagnóstico del médico" style={styles.cardInput} />
                 </div>
 
                 <div style={styles.formRow}>
                   <div style={styles.formGroup}>
-                    <label>💊 Medicamentos</label>
+                    <label>Medicamentos</label>
                     <input name="medicamentos" value={consultaForm.medicamentos} onChange={handleChangeConsulta} placeholder="Medicamentos recetados" style={styles.cardInput} />
                   </div>
                   <div style={styles.formGroup}>
-                    <label>📄 Receta</label>
+                    <label>Receta</label>
                     <input name="receta" value={consultaForm.receta} onChange={handleChangeConsulta} placeholder="Número de receta o detalles" style={styles.cardInput} />
                   </div>
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label>📋 CIE-10</label>
+                  <label>CIE-10</label>
                   <input name="cie10" value={consultaForm.cie10} onChange={handleChangeConsulta} placeholder="Código CIE-10" style={styles.cardInput} />
                 </div>
 
@@ -1964,7 +1964,7 @@ function App() {
             <div style={styles.modalContent}>
               <div style={styles.modalHeader}>
                 <div>
-                  <h2>📋 {tipoExamen.toUpperCase()} - Examen Especial</h2>
+                  <h2>{tipoExamen.toUpperCase()} - Examen Especial</h2>
                   <h3>Paciente: {pacienteSeleccionado.nombre}</h3>
                 </div>
                 <button onClick={handleCerrarExamen} style={styles.closeButton}>✕</button>
@@ -1973,8 +1973,8 @@ function App() {
               {mensajeExamen && (
                 <div style={{
                   ...styles.mensajeBox,
-                  background: mensajeExamen.includes('✅') ? '#d4edda' : '#f8d7da',
-                  color: mensajeExamen.includes('✅') ? '#155724' : '#721c24'
+                  background: mensajeExamen.includes('') ? '#d4edda' : '#f8d7da',
+                  color: mensajeExamen.includes('') ? '#155724' : '#721c24'
                 }}>
                   {mensajeExamen}
                 </div>
@@ -1982,7 +1982,7 @@ function App() {
 
               <form onSubmit={handleGuardarExamen} style={styles.consultaForm}>
                 <div style={styles.formGroup}>
-                  <label>📅 Fecha</label>
+                  <label>Fecha</label>
                   <input type="date" name="fecha" value={examenForm.fecha || ''} onChange={handleChangeExamen} style={styles.cardInput} required />
                 </div>
 
@@ -1990,27 +1990,27 @@ function App() {
                 <div style={styles.formDivider}>--- Diagnóstico y Exploración ---</div>
 
                 <div style={styles.formGroup}>
-                  <label>🩺 Impresión Diagnóstica</label>
+                  <label>Impresión Diagnóstica</label>
                   <textarea name="impresion_diagnostica" value={examenForm.impresion_diagnostica || ''} onChange={handleChangeExamen} rows="2" placeholder="Diagnóstico del médico" style={styles.cardInput} />
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label>📋 CIE-10</label>
+                  <label>CIE-10</label>
                   <input name="cie10" value={examenForm.cie10 || ''} onChange={handleChangeExamen} placeholder="Código CIE-10" style={styles.cardInput} />
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label>🩺 Exploración Física</label>
+                  <label>Exploración Física</label>
                   <textarea name="exploracion_fisica" value={examenForm.exploracion_fisica || ''} onChange={handleChangeExamen} rows="2" placeholder="Resultados de la exploración física" style={styles.cardInput} />
                 </div>
 
                 <div style={styles.formRow}>
                   <div style={styles.formGroup}>
-                    <label>📊 Signos Vitales</label>
+                    <label>Signos Vitales</label>
                     <input name="signos_vitales" value={examenForm.signos_vitales || ''} onChange={handleChangeExamen} placeholder="TA, FC, FR, Temp" style={styles.cardInput} />
                   </div>
                   <div style={styles.formGroup}>
-                    <label>👁️ Agudeza Visual</label>
+                    <label>Agudeza Visual</label>
                     <input name="agudeza_visual" value={examenForm.agudeza_visual || ''} onChange={handleChangeExamen} placeholder="Resultado de agudeza visual" style={styles.cardInput} />
                   </div>
                 </div>
@@ -2023,7 +2023,7 @@ function App() {
 
               {examenesPaciente.length > 0 && (
                 <div style={styles.historialContainer}>
-                  <h4>📜 Historial de {tipoExamen.toUpperCase()}</h4>
+                  <h4>Historial de {tipoExamen.toUpperCase()}</h4>
                   <div style={styles.historialList}>
                     {examenesPaciente.map(e => (
                       <div key={e.id} style={styles.historialItem}>
@@ -2043,200 +2043,231 @@ function App() {
   );
 }
 // ===== ESTILOS =====
+// ==================== TOKENS DE DISEÑO ====================
+const ink = '#1A1A18';
+const muted = '#8A8A85';
+const mutedLight = '#B3B3AD';
+const border = '#E4E4E1';
+const borderLight = '#EEEEEE';
+const accent = '#2F6844';
+const accentLight = '#EAF1E7';
+const accentDark = '#234E33';
+const danger = '#B3261E';
+const dangerLight = '#F8E4E2';
+const amber = '#C9922E';
+const fontDisplay = "'Fraunces', Georgia, serif";
+const fontBody = "'Work Sans', -apple-system, sans-serif";
+
+const ghostButton = {
+  background: '#fff',
+  color: ink,
+  border: `1px solid ${border}`,
+  padding: '8px 16px',
+  borderRadius: '4px',
+  cursor: 'pointer',
+  fontSize: '13px',
+  fontWeight: '500',
+  whiteSpace: 'nowrap',
+  transition: 'border-color 0.2s, background 0.2s',
+  fontFamily: fontBody,
+};
+
 const styles = {
   loginContainer: {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
     minHeight: '100vh',
-    background: 'linear-gradient(135deg, #1a5bbf 0%, #2c7be5 50%, #6c8cff 100%)',
-    fontFamily: 'Inter, -apple-system, sans-serif',
+    background: '#fff',
+    fontFamily: fontBody,
     padding: '20px',
     position: 'relative',
   },
   loginBox: {
-    background: 'rgba(255, 255, 255, 0.95)',
-    padding: '40px 50px',
-    borderRadius: '24px',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+    background: '#fff',
+    padding: '48px 44px',
+    borderRadius: '4px',
     width: '100%',
-    maxWidth: '440px',
+    maxWidth: '400px',
     textAlign: 'center',
-    backdropFilter: 'blur(10px)',
-    border: '1px solid rgba(255,255,255,0.2)',
-    animation: 'fadeInUp 0.5s ease-out',
   },
-  title: { 
-    fontSize: '34px', 
-    fontWeight: '800',
-    color: '#1a5bbf', 
+  title: {
+    fontFamily: fontDisplay,
+    fontSize: '26px',
+    fontWeight: '500',
+    color: ink,
     margin: '0',
-    letterSpacing: '-0.5px',
+    letterSpacing: '0.08em',
   },
-  subtitle: { 
-    fontSize: '16px', 
-    color: '#6b7a8f', 
-    margin: '4px 0 24px 0',
+  subtitle: {
+    fontFamily: fontDisplay,
+    fontStyle: 'italic',
+    fontSize: '15px',
+    color: accent,
+    margin: '4px 0 28px 0',
     fontWeight: '400',
   },
-  welcomeText: { 
-    color: '#6b7a8f', 
-    marginBottom: '20px',
-    fontSize: '14px',
+  welcomeText: {
+    color: muted,
+    marginBottom: '18px',
+    fontSize: '13px',
   },
-  errorBox: { 
-    background: '#f8d7da',
-    color: '#721c24',
+  errorBox: {
+    background: dangerLight,
+    color: danger,
     padding: '12px 16px',
-    borderRadius: '10px',
+    borderRadius: '4px',
     marginBottom: '16px',
     fontSize: '14px',
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
   },
-  input: { 
-    display: 'block', 
-    width: '100%', 
-    padding: '14px 16px',
-    margin: '8px 0', 
-    border: '2px solid #e9ecef',
-    borderRadius: '12px', 
+  input: {
+    display: 'block',
+    width: '100%',
+    padding: '12px 14px',
+    margin: '8px 0',
+    border: `1px solid ${border}`,
+    borderRadius: '4px',
     fontSize: '15px',
     boxSizing: 'border-box',
-    transition: 'all 0.3s',
+    transition: 'border-color 0.2s',
     outline: 'none',
-    backgroundColor: '#f8f9fa',
-    fontFamily: 'Inter, sans-serif',
+    backgroundColor: '#fff',
+    fontFamily: fontBody,
   },
-  loginButton: { 
-    width: '100%', 
-    padding: '14px',
-    background: 'linear-gradient(135deg, #2c7be5, #1a5bbf)',
+  loginButton: {
+    width: '100%',
+    padding: '13px',
+    background: accent,
     color: 'white',
     border: 'none',
-    borderRadius: '12px',
-    fontSize: '17px',
-    fontWeight: '600',
+    borderRadius: '4px',
+    fontSize: '15px',
+    fontWeight: '500',
     cursor: 'pointer',
-    marginTop: '12px',
-    transition: 'all 0.3s',
-    fontFamily: 'Inter, sans-serif',
+    marginTop: '10px',
+    transition: 'background 0.2s',
+    fontFamily: fontBody,
+    letterSpacing: '0.02em',
   },
-  testCredentials: { 
+  testCredentials: {
     marginTop: '24px',
     padding: '16px',
-    background: '#f8f9fa',
-    borderRadius: '12px',
+    background: '#FAFAF8',
+    borderRadius: '4px',
     fontSize: '13px',
     textAlign: 'left',
+    color: muted,
   },
-  appContainer: { 
-    fontFamily: 'Inter, -apple-system, sans-serif',
-    minHeight: '100vh', 
-    background: '#f0f4f8',
+  appContainer: {
+    fontFamily: fontBody,
+    minHeight: '100vh',
+    background: '#fff',
+    color: ink,
   },
-  header: { 
-    background: 'white',
+  header: {
+    background: accent,
     padding: '16px 32px',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
     position: 'sticky',
     top: 0,
     zIndex: 100,
-    borderBottom: '1px solid #e9ecef',
     flexWrap: 'wrap',
     gap: '12px',
   },
-  headerLeft: { 
+  headerLeft: {
     display: 'flex',
     alignItems: 'center',
     gap: '20px',
     flexWrap: 'wrap',
   },
   headerTitle: {
-    fontSize: '22px',
-    fontWeight: '800',
-    color: '#1a5bbf',
-    letterSpacing: '-0.5px',
+    fontFamily: fontDisplay,
+    fontSize: '19px',
+    fontWeight: '500',
+    color: '#fff',
+    letterSpacing: '0.06em',
   },
   headerLogo: {
-    height: '36px',
+    height: '32px',
     maxWidth: '180px',
     objectFit: 'contain',
   },
   loginLogo: {
-    maxHeight: '70px',
+    maxHeight: '64px',
     maxWidth: '260px',
     objectFit: 'contain',
-    marginBottom: '8px',
+    marginBottom: '12px',
   },
-  headerRole: { 
-    fontSize: '15px',
-    color: '#333',
+  headerRole: {
+    fontSize: '13px',
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '400',
+  },
+  headerBadge: {
+    padding: '3px 12px',
+    borderRadius: '4px',
+    fontSize: '11px',
     fontWeight: '500',
-  },
-  headerBadge: { 
-    padding: '4px 14px',
-    borderRadius: '20px',
-    fontSize: '12px',
-    fontWeight: '600',
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
     display: 'inline-block',
   },
-  logoutButton: { 
-    background: '#f8f9fa',
-    color: '#dc3545',
-    border: '2px solid #dc3545',
-    padding: '8px 20px',
-    borderRadius: '10px',
+  logoutButton: {
+    background: 'transparent',
+    color: '#fff',
+    border: '1px solid rgba(255,255,255,0.4)',
+    padding: '8px 18px',
+    borderRadius: '4px',
     cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '600',
-    transition: 'all 0.3s',
-    fontFamily: 'Inter, sans-serif',
+    fontSize: '13px',
+    fontWeight: '500',
+    transition: 'background 0.2s',
+    fontFamily: fontBody,
   },
-  content: { 
-    padding: '24px',
+  content: {
+    padding: '32px 24px',
     maxWidth: '1200px',
     margin: '0 auto',
   },
-  welcomeSection: { 
-    background: 'linear-gradient(135deg, #e8f4fd, #d4e8f7)',
-    padding: '16px 24px',
-    borderRadius: '12px',
-    marginBottom: '24px',
-    borderLeft: '4px solid #2c7be5',
+  welcomeSection: {
+    background: accentLight,
+    padding: '14px 20px',
+    borderRadius: '4px',
+    marginBottom: '28px',
+    color: accentDark,
+    fontSize: '14px',
   },
-  mainGrid: { 
+  mainGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
     gap: '24px',
     marginBottom: '24px',
     alignItems: 'start',
   },
-  formCard: { 
+  formCard: {
     background: 'white',
     padding: '24px',
-    borderRadius: '16px',
-    boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
-    border: '1px solid #e9ecef',
+    borderRadius: '4px',
+    border: `1px solid ${borderLight}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
   },
-  listCard: { 
+  listCard: {
     background: 'white',
     padding: '24px',
-    borderRadius: '16px',
-    boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
-    border: '1px solid #e9ecef',
+    borderRadius: '4px',
+    border: `1px solid ${borderLight}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
   },
-  cardHeader: { 
+  cardHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -2244,420 +2275,331 @@ const styles = {
     flexWrap: 'wrap',
     gap: '8px',
   },
-  cardTitle: { 
+  cardTitle: {
+    fontFamily: fontDisplay,
     fontSize: '18px',
-    fontWeight: '700',
-    color: '#1a2332',
+    fontWeight: '500',
+    color: ink,
     margin: 0,
   },
-  cardForm: { 
+  cardForm: {
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
     width: '100%',
   },
-  cardInput: { 
-    padding: '12px 14px',
-    border: '2px solid #e9ecef',
-    borderRadius: '10px',
+  cardInput: {
+    padding: '11px 14px',
+    border: `1px solid ${border}`,
+    borderRadius: '4px',
     fontSize: '14px',
-    transition: 'all 0.3s',
+    transition: 'border-color 0.2s',
     outline: 'none',
-    fontFamily: 'Inter, sans-serif',
+    fontFamily: fontBody,
     width: '100%',
     boxSizing: 'border-box',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#fff',
   },
-  adminGrid: { 
+  adminGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
     gap: '24px',
     alignItems: 'start',
   },
-  saveButton: { 
-    background: 'linear-gradient(135deg, #28a745, #1e7e34)',
+  saveButton: {
+    background: accent,
     color: 'white',
     border: 'none',
-    padding: '14px 24px',
-    borderRadius: '10px',
+    padding: '12px 24px',
+    borderRadius: '4px',
     cursor: 'pointer',
-    fontSize: '16px',
-    fontWeight: '600',
+    fontSize: '14px',
+    fontWeight: '500',
     marginTop: '4px',
     width: '100%',
-    transition: 'all 0.3s',
-    fontFamily: 'Inter, sans-serif',
+    transition: 'background 0.2s',
+    fontFamily: fontBody,
     boxSizing: 'border-box',
   },
-  createButton: { 
-    background: 'linear-gradient(135deg, #28a745, #1e7e34)',
+  createButton: {
+    background: accent,
     color: 'white',
     border: 'none',
-    padding: '14px 24px',
-    borderRadius: '10px',
+    padding: '12px 24px',
+    borderRadius: '4px',
     cursor: 'pointer',
-    fontSize: '16px',
-    fontWeight: '600',
+    fontSize: '14px',
+    fontWeight: '500',
     marginTop: '4px',
     width: '100%',
-    transition: 'all 0.3s',
-    fontFamily: 'Inter, sans-serif',
+    transition: 'background 0.2s',
+    fontFamily: fontBody,
     boxSizing: 'border-box',
   },
-  exportButton: { 
-    background: 'linear-gradient(135deg, #28a745, #1e7e34)',
-    color: 'white',
-    border: 'none',
-    padding: '8px 16px',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontSize: '13px',
-    fontWeight: '600',
-    transition: 'all 0.3s',
-    whiteSpace: 'nowrap',
-    fontFamily: 'Inter, sans-serif',
+  exportButton: {
+    ...ghostButton,
     alignSelf: 'center',
   },
-  sectionTitle: { 
-    fontSize: '22px',
-    fontWeight: '700',
-    color: '#1a2332',
+  sectionTitle: {
+    fontFamily: fontDisplay,
+    fontSize: '21px',
+    fontWeight: '500',
+    color: ink,
     marginBottom: '16px',
   },
-  adminSection: { 
+  adminSection: {
     marginTop: '40px',
     paddingTop: '40px',
-    borderTop: '2px solid #e0e0e0',
+    borderTop: `1px solid ${borderLight}`,
   },
-  select: { 
+  select: {
     display: 'block',
     width: '100%',
-    padding: '12px 14px',
+    padding: '11px 14px',
     margin: '6px 0',
-    border: '2px solid #e9ecef',
-    borderRadius: '10px',
+    border: `1px solid ${border}`,
+    borderRadius: '4px',
     fontSize: '14px',
     boxSizing: 'border-box',
     background: 'white',
-    fontFamily: 'Inter, sans-serif',
+    fontFamily: fontBody,
   },
-  mensajeBox: { 
+  mensajeBox: {
     padding: '12px 16px',
-    borderRadius: '10px',
+    borderRadius: '4px',
     marginBottom: '16px',
     fontWeight: '500',
     fontSize: '14px',
   },
-  userItem: { 
-    borderBottom: '1px solid #eee',
-    padding: '12px 0',
+  userItem: {
+    borderBottom: `1px solid ${borderLight}`,
+    padding: '14px 0',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  userInfo: { 
+  userInfo: {
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
     flex: 1,
   },
-  userDetail: { 
-    color: '#666',
-    fontSize: '14px',
+  userDetail: {
+    color: muted,
+    fontSize: '13px',
   },
-  roleBadge: { 
+  roleBadge: {
     display: 'inline-block',
-    padding: '2px 12px',
-    borderRadius: '20px',
-    fontSize: '12px',
-    fontWeight: '600',
+    padding: '3px 11px',
+    borderRadius: '4px',
+    fontSize: '10px',
+    fontWeight: '500',
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
     width: 'fit-content',
   },
-  userDate: { 
-    color: '#999',
+  userDate: {
+    color: mutedLight,
     fontSize: '12px',
   },
-  deleteButton: { 
-    background: '#dc3545',
-    color: 'white',
-    border: 'none',
+  deleteButton: {
+    background: 'transparent',
+    color: danger,
+    border: `1px solid ${border}`,
     padding: '6px 12px',
-    borderRadius: '6px',
+    borderRadius: '4px',
     cursor: 'pointer',
     fontSize: '13px',
-    transition: 'all 0.3s',
+    transition: 'border-color 0.2s',
   },
-  editButton: { 
-    background: '#ffc107',
-    color: '#333',
-    border: 'none',
+  editButton: {
+    ...ghostButton,
     padding: '6px 12px',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontSize: '13px',
-    transition: 'all 0.3s',
   },
-  consultaButton: { 
-    background: '#17a2b8',
+  consultaButton: {
+    background: accent,
     color: 'white',
     border: 'none',
     padding: '6px 14px',
-    borderRadius: '6px',
+    borderRadius: '4px',
     cursor: 'pointer',
     fontSize: '13px',
-    fontWeight: '600',
+    fontWeight: '500',
     whiteSpace: 'nowrap',
-    transition: 'all 0.3s',
+    transition: 'background 0.2s',
   },
-  emiButton: { 
-    background: '#6f42c1',
-    color: 'white',
-    border: 'none',
+  emiButton: {
+    ...ghostButton,
     padding: '6px 10px',
-    borderRadius: '6px',
-    cursor: 'pointer',
     fontSize: '11px',
-    fontWeight: '600',
-    transition: 'all 0.3s',
   },
-  empButton: { 
-    background: '#e83e8c',
-    color: 'white',
-    border: 'none',
+  empButton: {
+    ...ghostButton,
     padding: '6px 10px',
-    borderRadius: '6px',
-    cursor: 'pointer',
     fontSize: '11px',
-    fontWeight: '600',
-    transition: 'all 0.3s',
   },
-  emrButton: { 
-    background: '#fd7e14',
-    color: 'white',
-    border: 'none',
+  emrButton: {
+    ...ghostButton,
     padding: '6px 10px',
-    borderRadius: '6px',
-    cursor: 'pointer',
     fontSize: '11px',
-    fontWeight: '600',
-    transition: 'all 0.3s',
   },
-  vulnerabilidadButton: { 
-    background: '#dc3545',
-    color: 'white',
-    border: 'none',
+  vulnerabilidadButton: {
+    ...ghostButton,
     padding: '6px 10px',
-    borderRadius: '6px',
-    cursor: 'pointer',
     fontSize: '11px',
-    fontWeight: '600',
-    transition: 'all 0.3s',
   },
-  dashboardSection: { 
+  dashboardSection: {
     marginTop: '40px',
     paddingTop: '40px',
-    borderTop: '2px solid #e0e0e0',
+    borderTop: `1px solid ${borderLight}`,
   },
-  modalOverlay: { 
+  modalOverlay: {
     position: 'fixed',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    background: 'rgba(0,0,0,0.5)',
+    background: 'rgba(26,26,24,0.5)',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1000,
     padding: '20px',
-    backdropFilter: 'blur(4px)',
   },
-  modalContent: { 
+  modalContent: {
     background: 'white',
-    borderRadius: '16px',
+    borderRadius: '4px',
     padding: '30px',
     maxWidth: '800px',
     width: '100%',
     maxHeight: '90vh',
     overflowY: 'auto',
     position: 'relative',
-    animation: 'fadeInUp 0.3s ease-out',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
   },
-  modalHeader: { 
+  modalHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: '20px',
-    borderBottom: '2px solid #eee',
+    borderBottom: `1px solid ${borderLight}`,
     paddingBottom: '15px',
   },
-  closeButton: { 
-    background: '#dc3545',
-    color: 'white',
-    border: 'none',
-    padding: '8px 16px',
-    borderRadius: '8px',
+  closeButton: {
+    background: 'transparent',
+    color: muted,
+    border: `1px solid ${border}`,
+    padding: '6px 14px',
+    borderRadius: '4px',
     cursor: 'pointer',
-    fontSize: '18px',
-    fontWeight: 'bold',
-    transition: 'all 0.3s',
+    fontSize: '16px',
+    transition: 'border-color 0.2s',
   },
-  consultaForm: { 
+  consultaForm: {
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
   },
-  formRow: { 
+  formRow: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
     gap: '16px',
   },
-  formGroup: { 
+  formGroup: {
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
   },
-  formDivider: { 
-    borderTop: '2px solid #eee',
+  formDivider: {
+    borderTop: `1px solid ${borderLight}`,
     margin: '8px 0',
     textAlign: 'center',
-    color: '#999',
+    color: mutedLight,
     paddingTop: '8px',
     fontWeight: '500',
   },
-  buttonRow: { 
+  buttonRow: {
     display: 'flex',
     gap: '12px',
     justifyContent: 'flex-end',
     marginTop: '12px',
   },
-  cancelButton: { 
-    background: '#6c757d',
-    color: 'white',
-    border: 'none',
+  cancelButton: {
+    background: 'transparent',
+    color: muted,
+    border: `1px solid ${border}`,
     padding: '10px 24px',
-    borderRadius: '8px',
+    borderRadius: '4px',
     cursor: 'pointer',
-    fontSize: '16px',
-    transition: 'all 0.3s',
-    fontFamily: 'Inter, sans-serif',
+    fontSize: '14px',
+    transition: 'border-color 0.2s',
+    fontFamily: fontBody,
   },
-  historialContainer: { 
+  historialContainer: {
     marginTop: '20px',
-    borderTop: '2px solid #eee',
+    borderTop: `1px solid ${borderLight}`,
     paddingTop: '16px',
   },
-  historialList: { 
+  historialList: {
     maxHeight: '200px',
     overflowY: 'auto',
     marginTop: '8px',
   },
-  historialItem: { 
-    background: '#f8f9fa',
+  historialItem: {
+    background: '#FAFAF8',
     padding: '12px 16px',
-    borderRadius: '8px',
+    borderRadius: '4px',
     marginBottom: '8px',
-    border: '1px solid #e9ecef',
+    border: `1px solid ${borderLight}`,
   },
-  editButtonSmall: { 
-    background: '#ffc107',
-    color: '#333',
-    border: 'none',
+  editButtonSmall: {
+    ...ghostButton,
+    padding: '4px 10px',
+    fontSize: '12px',
+  },
+  deleteButtonSmall: {
+    background: 'transparent',
+    color: danger,
+    border: `1px solid ${border}`,
     padding: '4px 10px',
     borderRadius: '4px',
     cursor: 'pointer',
     fontSize: '12px',
-    transition: 'all 0.3s',
+    transition: 'border-color 0.2s',
   },
-  deleteButtonSmall: { 
-    background: '#dc3545',
-    color: 'white',
-    border: 'none',
+  pdfButtonGreen: {
+    ...ghostButton,
     padding: '4px 10px',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '12px',
-    transition: 'all 0.3s',
-  },
-  pdfButtonGreen: { 
-    background: '#28a745',
-    color: 'white',
-    border: 'none',
-    padding: '4px 10px',
-    borderRadius: '4px',
-    cursor: 'pointer',
     fontSize: '11px',
-    fontWeight: '600',
-    transition: 'all 0.3s',
   },
-  pdfButtonBlue: { 
-    background: '#007bff',
-    color: 'white',
-    border: 'none',
+  pdfButtonBlue: {
+    ...ghostButton,
     padding: '4px 10px',
-    borderRadius: '4px',
-    cursor: 'pointer',
     fontSize: '11px',
-    fontWeight: '600',
-    transition: 'all 0.3s',
   },
-  pdfButtonOrange: { 
-    background: '#fd7e14',
-    color: 'white',
-    border: 'none',
+  pdfButtonOrange: {
+    ...ghostButton,
     padding: '4px 10px',
-    borderRadius: '4px',
-    cursor: 'pointer',
     fontSize: '11px',
-    fontWeight: '600',
-    transition: 'all 0.3s',
   },
   exportButtonSmall: {
-    background: 'linear-gradient(135deg, #28a745, #1e7e34)',
-    color: 'white',
-    border: 'none',
+    ...ghostButton,
     padding: '4px 12px',
-    borderRadius: '6px',
-    cursor: 'pointer',
     fontSize: '12px',
-    fontWeight: '600',
-    transition: 'all 0.3s',
-    whiteSpace: 'nowrap',
-    fontFamily: 'Inter, sans-serif',
   },
   emailButtonGreen: {
-    background: '#28a745',
-    color: 'white',
-    border: 'none',
+    ...ghostButton,
     padding: '4px 10px',
-    borderRadius: '4px',
-    cursor: 'pointer',
     fontSize: '10px',
-    fontWeight: '600',
-    transition: 'all 0.3s',
   },
   emailButtonBlue: {
-    background: '#007bff',
-    color: 'white',
-    border: 'none',
+    ...ghostButton,
     padding: '4px 10px',
-    borderRadius: '4px',
-    cursor: 'pointer',
     fontSize: '10px',
-    fontWeight: '600',
-    transition: 'all 0.3s',
   },
   emailButtonOrange: {
-    background: '#fd7e14',
-    color: 'white',
-    border: 'none',
+    ...ghostButton,
     padding: '4px 10px',
-    borderRadius: '4px',
-    cursor: 'pointer',
     fontSize: '10px',
-    fontWeight: '600',
-    transition: 'all 0.3s',
   },
 };
 

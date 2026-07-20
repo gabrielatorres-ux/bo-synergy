@@ -133,25 +133,25 @@ function Dashboard({ empresaId }) {
       <h2 style={styles.title}>Dashboard de estadísticas</h2>
 
       <div style={styles.statsGrid}>
-        <div style={{ ...styles.statCard, background: '#EDF5EF' }}>
+        <div style={styles.statCard}>
           <div>
             <h3 style={styles.statNumber}>{estadisticas?.totalPacientes || 0}</h3>
             <p style={styles.statLabel}>Pacientes</p>
           </div>
         </div>
-        <div style={{ ...styles.statCard, background: '#FBF1E9' }}>
+        <div style={styles.statCard}>
           <div>
             <h3 style={styles.statNumber}>{estadisticas?.totalConsultas || 0}</h3>
             <p style={styles.statLabel}>Consultas</p>
           </div>
         </div>
-        <div style={{ ...styles.statCard, background: '#FBF3E3' }}>
+        <div style={styles.statCard}>
           <div>
             <h3 style={styles.statNumber}>{(estadisticas?.totalEMI || 0) + (estadisticas?.totalEMP || 0) + (estadisticas?.totalEMR || 0)}</h3>
             <p style={styles.statLabel}>Exámenes</p>
           </div>
         </div>
-        <div style={{ ...styles.statCard, background: '#FBEAEA' }}>
+        <div style={styles.statCard}>
           <div>
             <h3 style={styles.statNumber}>{estadisticas?.totalVulnerabilidad || 0}</h3>
             <p style={styles.statLabel}>Vulnerabilidades</p>

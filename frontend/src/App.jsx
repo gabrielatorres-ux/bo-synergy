@@ -2055,6 +2055,11 @@ const accentDark = '#234E33';
 const danger = '#B3261E';
 const dangerLight = '#F8E4E2';
 const amber = '#C9922E';
+const pageBg = '#F5F8F6';
+const pastelMint = '#EDF5EF';
+const pastelPeach = '#FBF1E9';
+const pastelAmber = '#FBF3E3';
+const pastelRose = '#FBEAEA';
 const fontDisplay = "'Fraunces', Georgia, serif";
 const fontBody = "'Work Sans', -apple-system, sans-serif";
 
@@ -2078,7 +2083,7 @@ const styles = {
     justifyContent: 'center',
     alignItems: 'center',
     minHeight: '100vh',
-    background: '#fff',
+    background: pageBg,
     fontFamily: fontBody,
     padding: '20px',
     position: 'relative',
@@ -2155,7 +2160,7 @@ const styles = {
   testCredentials: {
     marginTop: '24px',
     padding: '16px',
-    background: '#FAFAF8',
+    background: pastelMint,
     borderRadius: '4px',
     fontSize: '13px',
     textAlign: 'left',
@@ -2164,7 +2169,7 @@ const styles = {
   appContainer: {
     fontFamily: fontBody,
     minHeight: '100vh',
-    background: '#fff',
+    background: pageBg,
     color: ink,
   },
   header: {
@@ -2250,7 +2255,7 @@ const styles = {
     alignItems: 'start',
   },
   formCard: {
-    background: 'white',
+    background: pastelMint,
     padding: '24px',
     borderRadius: '4px',
     border: `1px solid ${borderLight}`,
@@ -2259,7 +2264,7 @@ const styles = {
     gap: '12px',
   },
   listCard: {
-    background: 'white',
+    background: pastelPeach,
     padding: '24px',
     borderRadius: '4px',
     border: `1px solid ${borderLight}`,
@@ -2545,7 +2550,7 @@ const styles = {
     marginTop: '8px',
   },
   historialItem: {
-    background: '#FAFAF8',
+    background: pastelAmber,
     padding: '12px 16px',
     borderRadius: '4px',
     marginBottom: '8px',

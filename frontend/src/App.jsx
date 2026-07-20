@@ -16,6 +16,10 @@ function App() {
   const [errorLogin, setErrorLogin] = useState('');
   const [mostrarLogin, setMostrarLogin] = useState(true);
   const [empresaLogin, setEmpresaLogin] = useState(null);
+  const [mostrarRegistro, setMostrarRegistro] = useState(false);
+  const [registroEnviado, setRegistroEnviado] = useState(false);
+  const [registroForm, setRegistroForm] = useState({ nombre: '', admin_num_empleado: '', admin_nombre: '', admin_password: '' });
+  const [registroLogo, setRegistroLogo] = useState(null);
   const [pacientes, setPacientes] = useState([]);
   const [busquedaPaciente, setBusquedaPaciente] = useState('');
   const [paginaPacientes, setPaginaPacientes] = useState(1);
@@ -147,6 +151,22 @@ function App() {
       } else {
         setErrorLogin('Error de conexión con el servidor');
       }
+    }
+  };
+
+  const handleSolicitarRegistro = async (e) => {
+    e.preventDefault();
+    try {
+      const data = new FormData();
+      data.append('nombre', registroForm.nombre);
+      data.append('admin_num_empleado', registroForm.admin_num_empleado);
+      data.append('admin_nombre', registroForm.admin_nombre);
+      data.append('admin_password', registroForm.admin_password);
+      if (registroLogo) data.append('logo', registroLogo);
+      await axios.post(`${API_URL}/empresas/solicitar-registro`, data);
+      setRegistroEnviado(true);
+    } catch (error) {
+      toast.error(`❌ ${error.response?.data?.error || 'Error al enviar la solicitud'}`);
     }
   };
 
@@ -347,6 +367,16 @@ function App() {
       cargarEmpresas();
     } catch (error) {
       toast.error(`❌ ${error.response?.data?.error || 'Error al crear empresa'}`);
+    }
+  };
+
+  const handleAprobarEmpresa = async (id) => {
+    try {
+      await api.patch(`${API_URL}/empresas/${id}/aprobar`);
+      toast.success('✅ Empresa aprobada correctamente');
+      cargarEmpresas();
+    } catch (error) {
+      toast.error('❌ Error al aprobar empresa');
     }
   };
 
@@ -1167,21 +1197,85 @@ function App() {
               <h1 style={styles.title}>🏥 {empresaLogin?.nombre || 'BO Synergy'}</h1>
             )}
             <h2 style={styles.subtitle}>Salud Ocupacional</h2>
-            <p style={styles.welcomeText}>Inicia sesión para continuar</p>
-            {errorLogin && (
-              <div style={styles.errorBox}>❌ {errorLogin}</div>
+
+            {!mostrarRegistro ? (
+              <>
+                <p style={styles.welcomeText}>Inicia sesión para continuar</p>
+                {errorLogin && (
+                  <div style={styles.errorBox}>❌ {errorLogin}</div>
+                )}
+                <form onSubmit={handleLogin}>
+                  <input type="text" placeholder="Número de empleado" value={numEmpleado} onChange={(e) => setNumEmpleado(e.target.value)} style={styles.input} required />
+                  <input type="password" placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)} style={styles.input} required />
+                  <button type="submit" style={styles.loginButton}>Iniciar Sesión</button>
+                </form>
+                <div style={styles.testCredentials}>
+                  <p>👨‍💻 Usuarios de prueba:</p>
+                  <p><strong>Admin:</strong> ADMIN001 / admin123</p>
+                  <p><strong>Médico:</strong> MED001 / medico123</p>
+                  <p><strong>Enfermera:</strong> ENF001 / enfermera123</p>
+                </div>
+                <p style={styles.welcomeText}>
+                  ¿Eres una empresa nueva?{' '}
+                  <a href="#" onClick={(e) => { e.preventDefault(); setMostrarRegistro(true); setRegistroEnviado(false); }}>
+                    Regístrate aquí
+                  </a>
+                </p>
+              </>
+            ) : registroEnviado ? (
+              <div style={styles.mensajeBox}>
+                ✅ Tu solicitud fue enviada. Te avisaremos cuando tu cuenta esté aprobada.
+                <p>
+                  <a href="#" onClick={(e) => { e.preventDefault(); setMostrarRegistro(false); }}>
+                    ← Volver al login
+                  </a>
+                </p>
+              </div>
+            ) : (
+              <form onSubmit={handleSolicitarRegistro}>
+                <input
+                  placeholder="Nombre de tu empresa *"
+                  value={registroForm.nombre}
+                  onChange={(e) => setRegistroForm({ ...registroForm, nombre: e.target.value })}
+                  style={styles.input}
+                  required
+                />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setRegistroLogo(e.target.files[0])}
+                  style={styles.input}
+                />
+                <input
+                  placeholder="Tu número de empleado *"
+                  value={registroForm.admin_num_empleado}
+                  onChange={(e) => setRegistroForm({ ...registroForm, admin_num_empleado: e.target.value })}
+                  style={styles.input}
+                  required
+                />
+                <input
+                  placeholder="Tu nombre completo *"
+                  value={registroForm.admin_nombre}
+                  onChange={(e) => setRegistroForm({ ...registroForm, admin_nombre: e.target.value })}
+                  style={styles.input}
+                  required
+                />
+                <input
+                  type="password"
+                  placeholder="Contraseña *"
+                  value={registroForm.admin_password}
+                  onChange={(e) => setRegistroForm({ ...registroForm, admin_password: e.target.value })}
+                  style={styles.input}
+                  required
+                />
+                <button type="submit" style={styles.loginButton}>Solicitar Registro</button>
+                <p style={styles.welcomeText}>
+                  <a href="#" onClick={(e) => { e.preventDefault(); setMostrarRegistro(false); }}>
+                    ← Ya tengo cuenta, quiero iniciar sesión
+                  </a>
+                </p>
+              </form>
             )}
-            <form onSubmit={handleLogin}>
-              <input type="text" placeholder="Número de empleado" value={numEmpleado} onChange={(e) => setNumEmpleado(e.target.value)} style={styles.input} required />
-              <input type="password" placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)} style={styles.input} required />
-              <button type="submit" style={styles.loginButton}>Iniciar Sesión</button>
-            </form>
-            <div style={styles.testCredentials}>
-              <p>👨‍💻 Usuarios de prueba:</p>
-              <p><strong>Admin:</strong> ADMIN001 / admin123</p>
-              <p><strong>Médico:</strong> MED001 / medico123</p>
-              <p><strong>Enfermera:</strong> ENF001 / enfermera123</p>
-            </div>
           </div>
         </div>
       </>
@@ -1520,8 +1614,14 @@ function App() {
                             <img src={emp.logo_url} alt={emp.nombre} style={{ height: '32px', objectFit: 'contain' }} />
                           )}
                           <strong>{emp.nombre}</strong>
+                          {!emp.activo && (
+                            <span style={{ ...styles.roleBadge, background: '#ffc107', color: '#333' }}>⏳ Pendiente</span>
+                          )}
                           <span style={styles.userDetail}>{window.location.origin}/login/{emp.slug}</span>
                         </div>
+                        {!emp.activo && (
+                          <button onClick={() => handleAprobarEmpresa(emp.id)} style={styles.createButton}>✅ Aprobar</button>
+                        )}
                       </li>
                     ))}
                   </ul>

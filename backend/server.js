@@ -67,6 +67,26 @@ app.get('/api/empresas/by-slug/:slug', async (req, res) => {
   }
 });
 
+// Crea la empresa junto con su primer usuario admin (sin esto no habría
+// forma de entrar a una empresa nueva: nadie de ahí existiría todavía
+// para crear a los demás usuarios). `activo=false` se usa para el
+// auto-registro público, que queda pendiente de aprobación.
+const crearEmpresaConAdmin = async ({ nombre, file, adminNumEmpleado, adminNombre, adminPassword, activo }) => {
+  const logoUrl = file ? await subirLogo(file) : null;
+  const slug = await generarSlugUnico(nombre);
+  const result = await queryRun(
+    'INSERT INTO empresas (nombre, logo_url, slug, activo) VALUES ($1, $2, $3, $4) RETURNING id',
+    [nombre, logoUrl, slug, activo]
+  );
+  const empresaId = result.rows[0].id;
+  await queryRun(
+    `INSERT INTO usuarios (num_empleado, nombre, rol, password, empresa_id, fecha_registro)
+     VALUES ($1, $2, 'admin', $3, $4, NOW())`,
+    [adminNumEmpleado, adminNombre, adminPassword, empresaId]
+  );
+  return { empresaId, slug };
+};
+
 app.post('/api/empresas', upload.single('logo'), async (req, res) => {
   const { nombre, admin_num_empleado, admin_nombre, admin_password } = req.body;
   if (!nombre) {
@@ -76,28 +96,53 @@ app.post('/api/empresas', upload.single('logo'), async (req, res) => {
     return res.status(400).json({ error: 'Los datos del administrador de la empresa son requeridos' });
   }
   try {
-    // Sube el logo ANTES de crear la fila: si la subida falla, no queda
-    // una empresa huérfana sin logo en la base de datos.
-    const logoUrl = req.file ? await subirLogo(req.file) : null;
-    const slug = await generarSlugUnico(nombre);
-    const result = await queryRun(
-      'INSERT INTO empresas (nombre, logo_url, slug) VALUES ($1, $2, $3) RETURNING id',
-      [nombre, logoUrl, slug]
-    );
-    const empresaId = result.rows[0].id;
-    // Se crea también el primer usuario admin: sin esto no habría forma de
-    // entrar a la empresa nueva (nadie de ahí existe todavía para crear
-    // a los demás usuarios).
-    await queryRun(
-      `INSERT INTO usuarios (num_empleado, nombre, rol, password, empresa_id, fecha_registro)
-       VALUES ($1, $2, 'admin', $3, $4, NOW())`,
-      [admin_num_empleado, admin_nombre, admin_password, empresaId]
-    );
+    const { empresaId, slug } = await crearEmpresaConAdmin({
+      nombre,
+      file: req.file,
+      adminNumEmpleado: admin_num_empleado,
+      adminNombre: admin_nombre,
+      adminPassword: admin_password,
+      activo: true
+    });
     res.json({ id: empresaId, slug, message: 'Empresa creada correctamente' });
   } catch (error) {
     if (error.code === '23505') {
       return res.status(400).json({ error: 'El número de empleado del administrador ya existe' });
     }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Pública: una empresa se auto-registra pero queda inactiva hasta que el
+// superadmin la apruebe desde "Gestión de Empresas".
+app.post('/api/empresas/solicitar-registro', upload.single('logo'), async (req, res) => {
+  const { nombre, admin_num_empleado, admin_nombre, admin_password } = req.body;
+  if (!nombre || !admin_num_empleado || !admin_nombre || !admin_password) {
+    return res.status(400).json({ error: 'Todos los campos son requeridos' });
+  }
+  try {
+    await crearEmpresaConAdmin({
+      nombre,
+      file: req.file,
+      adminNumEmpleado: admin_num_empleado,
+      adminNombre: admin_nombre,
+      adminPassword: admin_password,
+      activo: false
+    });
+    res.json({ message: 'Tu solicitud fue enviada. Te avisaremos cuando tu cuenta esté aprobada.' });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'El número de empleado ya existe' });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/empresas/:id/aprobar', async (req, res) => {
+  try {
+    await queryRun('UPDATE empresas SET activo = true WHERE id = $1', [req.params.id]);
+    res.json({ message: 'Empresa aprobada correctamente' });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -426,7 +471,7 @@ app.post('/api/login', async (req, res) => {
 
   try {
     const result = await queryOne(
-      `SELECT u.*, e.nombre as empresa_nombre, e.logo_url as empresa_logo_url, e.slug as empresa_slug
+      `SELECT u.*, e.nombre as empresa_nombre, e.logo_url as empresa_logo_url, e.slug as empresa_slug, e.activo as empresa_activa
        FROM usuarios u
        JOIN empresas e ON u.empresa_id = e.id
        WHERE u.num_empleado = $1 AND u.password = $2`,
@@ -435,7 +480,10 @@ app.post('/api/login', async (req, res) => {
     if (!result) {
       return res.status(401).json({ error: 'Credenciales incorrectas' });
     }
-    const { password: _, ...userWithoutPassword } = result;
+    if (!result.empresa_activa) {
+      return res.status(403).json({ error: 'Tu empresa está pendiente de aprobación. Te avisaremos cuando esté activa.' });
+    }
+    const { password: _, empresa_activa: __, ...userWithoutPassword } = result;
     res.json({
       success: true,
       user: userWithoutPassword,

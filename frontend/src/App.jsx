@@ -14,6 +14,9 @@ function App() {
   const [errorLogin, setErrorLogin] = useState('');
   const [mostrarLogin, setMostrarLogin] = useState(true);
   const [pacientes, setPacientes] = useState([]);
+  const [busquedaPaciente, setBusquedaPaciente] = useState('');
+  const [paginaPacientes, setPaginaPacientes] = useState(1);
+  const [totalPaginasPacientes, setTotalPaginasPacientes] = useState(1);
   const [formData, setFormData] = useState({
     num_empleado: '',
     nombre: '',
@@ -106,14 +109,27 @@ function App() {
   };
 
   // ===== FUNCIONES DE PACIENTES =====
-  const cargarPacientes = async () => {
+  const cargarPacientes = async (page = 1, search = busquedaPaciente) => {
     try {
-      const response = await axios.get(`${API_URL}/pacientes`);
-      setPacientes(response.data);
+      const response = await axios.get(`${API_URL}/pacientes`, {
+        params: { page, limit: 20, search }
+      });
+      setPacientes(response.data.pacientes);
+      setPaginaPacientes(response.data.page);
+      setTotalPaginasPacientes(response.data.totalPages);
     } catch (error) {
       console.error('Error al cargar pacientes:', error);
     }
   };
+
+  useEffect(() => {
+    if (!usuario) return;
+    const timeoutId = setTimeout(() => {
+      cargarPacientes(1, busquedaPaciente);
+    }, 400);
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busquedaPaciente]);
 
   const handleChange = (e) => {
     setFormData({
@@ -137,7 +153,7 @@ function App() {
         area: '',
         supervisor: ''
       });
-      cargarPacientes();
+      cargarPacientes(paginaPacientes);
     } catch (error) {
       toast.error('❌ Error al agregar paciente');
       console.error(error);
@@ -149,7 +165,7 @@ function App() {
     try {
       await axios.delete(`${API_URL}/pacientes/${id}`);
       toast.success('✅ Paciente eliminado correctamente');
-      cargarPacientes();
+      cargarPacientes(paginaPacientes);
     } catch (error) {
       toast.error('❌ Error al eliminar paciente');
     }
@@ -187,7 +203,7 @@ function App() {
         area: '',
         supervisor: ''
       });
-      cargarPacientes();
+      cargarPacientes(paginaPacientes);
     } catch (error) {
       toast.error('❌ Error al actualizar paciente');
     }
@@ -687,13 +703,24 @@ function App() {
   };
 
   // ===== FUNCIONES DE EXPORTACIÓN A EXCEL =====
-  const exportarPacientesExcel = () => {
-    if (pacientes.length === 0) {
+  const exportarPacientesExcel = async () => {
+    let pacientesAExportar;
+    try {
+      const response = await axios.get(`${API_URL}/pacientes`, {
+        params: { page: 1, limit: 100000, search: busquedaPaciente }
+      });
+      pacientesAExportar = response.data.pacientes;
+    } catch (error) {
+      toast.error('❌ Error al obtener pacientes para exportar');
+      return;
+    }
+
+    if (pacientesAExportar.length === 0) {
       toast.error('❌ No hay pacientes para exportar');
       return;
     }
 
-    const datos = pacientes.map(p => ({
+    const datos = pacientesAExportar.map(p => ({
       'N° Empleado': p.num_empleado,
       'Nombre': p.nombre,
       'Fecha Nacimiento': p.fecha_nac || '',
@@ -715,7 +742,7 @@ function App() {
     ws['!cols'] = colWidths;
 
     XLSX.writeFile(wb, `Pacientes_${new Date().toISOString().split('T')[0]}.xlsx`);
-    toast.success(`✅ ${pacientes.length} pacientes exportados correctamente`);
+    toast.success(`✅ ${pacientesAExportar.length} pacientes exportados correctamente`);
   };
 
   const exportarConsultasExcel = () => {
@@ -1166,8 +1193,17 @@ function App() {
                 📊 Exportar Excel
               </button>
             </div>
+            <input
+              type="text"
+              placeholder="🔍 Buscar por nombre, número de empleado o área..."
+              value={busquedaPaciente}
+              onChange={(e) => setBusquedaPaciente(e.target.value)}
+              style={styles.cardInput}
+            />
             {pacientes.length === 0 ? (
-              <p style={styles.emptyText}>No hay pacientes aún</p>
+              <p style={styles.emptyText}>
+                {busquedaPaciente ? 'No hay pacientes que coincidan con la búsqueda' : 'No hay pacientes aún'}
+              </p>
             ) : (
               <ul style={styles.patientList}>
                 {pacientes.map(p => (
@@ -1196,6 +1232,25 @@ function App() {
                   </li>
                 ))}
               </ul>
+            )}
+            {totalPaginasPacientes > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', marginTop: '12px' }}>
+                <button
+                  onClick={() => cargarPacientes(paginaPacientes - 1)}
+                  disabled={paginaPacientes <= 1}
+                  style={styles.editButton}
+                >
+                  ← Anterior
+                </button>
+                <span>Página {paginaPacientes} de {totalPaginasPacientes}</span>
+                <button
+                  onClick={() => cargarPacientes(paginaPacientes + 1)}
+                  disabled={paginaPacientes >= totalPaginasPacientes}
+                  style={styles.editButton}
+                >
+                  Siguiente →
+                </button>
+              </div>
             )}
           </div>
         </div>

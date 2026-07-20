@@ -13,8 +13,32 @@ app.use(express.json());
 
 app.get('/api/pacientes', async (req, res) => {
   try {
-    const result = await query('SELECT * FROM pacientes ORDER BY id');
-    res.json(result.rows);
+    const { search = '', page = 1, limit = 20 } = req.query;
+    const pageNum = Math.max(parseInt(page) || 1, 1);
+    const limitNum = Math.max(parseInt(limit) || 20, 1);
+    const offset = (pageNum - 1) * limitNum;
+    const searchTerm = `%${search}%`;
+
+    const result = await query(
+      `SELECT * FROM pacientes
+       WHERE nombre ILIKE $1 OR num_empleado ILIKE $1 OR area ILIKE $1
+       ORDER BY id
+       LIMIT $2 OFFSET $3`,
+      [searchTerm, limitNum, offset]
+    );
+    const totalResult = await queryOne(
+      `SELECT COUNT(*) as total FROM pacientes
+       WHERE nombre ILIKE $1 OR num_empleado ILIKE $1 OR area ILIKE $1`,
+      [searchTerm]
+    );
+    const total = parseInt(totalResult.total);
+
+    res.json({
+      pacientes: result.rows,
+      total,
+      page: pageNum,
+      totalPages: Math.max(Math.ceil(total / limitNum), 1)
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

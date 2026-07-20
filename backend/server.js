@@ -24,10 +24,44 @@ const subirLogo = async (file) => {
   return data.publicUrl;
 };
 
+const generarSlug = (texto) => texto
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '');
+
+const generarSlugUnico = async (nombre) => {
+  const base = generarSlug(nombre) || 'empresa';
+  let slug = base;
+  let i = 2;
+  while (await queryOne('SELECT id FROM empresas WHERE slug = $1', [slug])) {
+    slug = `${base}-${i}`;
+    i++;
+  }
+  return slug;
+};
+
 app.get('/api/empresas', async (req, res) => {
   try {
     const result = await query('SELECT * FROM empresas ORDER BY id');
     res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Pública (sin empresa_id): la usa la pantalla de login para mostrar el
+// logo/nombre correcto antes de que el usuario se autentique.
+app.get('/api/empresas/by-slug/:slug', async (req, res) => {
+  try {
+    const empresa = await queryOne(
+      'SELECT nombre, logo_url FROM empresas WHERE slug = $1 AND activo = true',
+      [req.params.slug]
+    );
+    if (!empresa) {
+      return res.status(404).json({ error: 'Empresa no encontrada' });
+    }
+    res.json(empresa);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -42,11 +76,12 @@ app.post('/api/empresas', upload.single('logo'), async (req, res) => {
     // Sube el logo ANTES de crear la fila: si la subida falla, no queda
     // una empresa huérfana sin logo en la base de datos.
     const logoUrl = req.file ? await subirLogo(req.file) : null;
+    const slug = await generarSlugUnico(nombre);
     const result = await queryRun(
-      'INSERT INTO empresas (nombre, logo_url) VALUES ($1, $2) RETURNING id',
-      [nombre, logoUrl]
+      'INSERT INTO empresas (nombre, logo_url, slug) VALUES ($1, $2, $3) RETURNING id',
+      [nombre, logoUrl, slug]
     );
-    res.json({ id: result.rows[0].id, message: 'Empresa creada correctamente' });
+    res.json({ id: result.rows[0].id, slug, message: 'Empresa creada correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -376,7 +411,7 @@ app.post('/api/login', async (req, res) => {
 
   try {
     const result = await queryOne(
-      `SELECT u.*, e.nombre as empresa_nombre, e.logo_url as empresa_logo_url
+      `SELECT u.*, e.nombre as empresa_nombre, e.logo_url as empresa_logo_url, e.slug as empresa_slug
        FROM usuarios u
        JOIN empresas e ON u.empresa_id = e.id
        WHERE u.num_empleado = $1 AND u.password = $2`,

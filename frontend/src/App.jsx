@@ -15,6 +15,7 @@ function App() {
   const [password, setPassword] = useState('');
   const [errorLogin, setErrorLogin] = useState('');
   const [mostrarLogin, setMostrarLogin] = useState(true);
+  const [empresaLogin, setEmpresaLogin] = useState(null);
   const [pacientes, setPacientes] = useState([]);
   const [busquedaPaciente, setBusquedaPaciente] = useState('');
   const [paginaPacientes, setPaginaPacientes] = useState(1);
@@ -78,6 +79,18 @@ function App() {
   const [mensajeExamen, setMensajeExamen] = useState('');
 
   const API_URL = 'https://bo-synergy-backend.onrender.com/api';
+
+  // Si la URL es /login/:slug, muestra el logo/nombre de esa empresa en
+  // la pantalla de login (antes de autenticar, cuando aún no sabemos
+  // quién es el usuario).
+  useEffect(() => {
+    const match = window.location.pathname.match(/^\/login\/([a-z0-9-]+)$/i);
+    if (!match) return;
+    axios.get(`${API_URL}/empresas/by-slug/${match[1]}`)
+      .then((response) => setEmpresaLogin(response.data))
+      .catch(() => setEmpresaLogin(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Agrega automáticamente el empresa_id del usuario logueado a cada
   // petición, para que el backend filtre los datos de esa empresa.
@@ -1143,7 +1156,11 @@ function App() {
         />
         <div style={styles.loginContainer}>
           <div style={styles.loginBox}>
-            <h1 style={styles.title}>🏥 BO Synergy</h1>
+            {empresaLogin?.logo_url ? (
+              <img src={empresaLogin.logo_url} alt={empresaLogin.nombre} style={styles.loginLogo} />
+            ) : (
+              <h1 style={styles.title}>🏥 {empresaLogin?.nombre || 'BO Synergy'}</h1>
+            )}
             <h2 style={styles.subtitle}>Salud Ocupacional</h2>
             <p style={styles.welcomeText}>Inicia sesión para continuar</p>
             {errorLogin && (
@@ -1425,6 +1442,11 @@ function App() {
                 )}
                 <button type="submit" style={styles.saveButton}>Guardar Empresa</button>
               </form>
+              {usuario.empresa_slug && (
+                <p style={styles.patientInfo}>
+                  🔗 Link de acceso para tu equipo: <strong>{window.location.origin}/login/{usuario.empresa_slug}</strong>
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -1470,6 +1492,7 @@ function App() {
                             <img src={emp.logo_url} alt={emp.nombre} style={{ height: '32px', objectFit: 'contain' }} />
                           )}
                           <strong>{emp.nombre}</strong>
+                          <span style={styles.userDetail}>{window.location.origin}/login/{emp.slug}</span>
                         </div>
                       </li>
                     ))}
@@ -2001,6 +2024,12 @@ const styles = {
     height: '36px',
     maxWidth: '180px',
     objectFit: 'contain',
+  },
+  loginLogo: {
+    maxHeight: '70px',
+    maxWidth: '260px',
+    objectFit: 'contain',
+    marginBottom: '8px',
   },
   headerRole: { 
     fontSize: '15px',

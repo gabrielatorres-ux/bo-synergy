@@ -42,6 +42,7 @@ function App() {
   const [empresas, setEmpresas] = useState([]);
   const [nuevaEmpresaNombre, setNuevaEmpresaNombre] = useState('');
   const [nuevaEmpresaLogo, setNuevaEmpresaLogo] = useState(null);
+  const [nuevaEmpresaAdmin, setNuevaEmpresaAdmin] = useState({ num_empleado: '', nombre: '', password: '' });
   const [miEmpresaNombre, setMiEmpresaNombre] = useState('');
   const [miEmpresaLogo, setMiEmpresaLogo] = useState(null);
 
@@ -334,14 +335,18 @@ function App() {
     try {
       const data = new FormData();
       data.append('nombre', nuevaEmpresaNombre);
+      data.append('admin_num_empleado', nuevaEmpresaAdmin.num_empleado);
+      data.append('admin_nombre', nuevaEmpresaAdmin.nombre);
+      data.append('admin_password', nuevaEmpresaAdmin.password);
       if (nuevaEmpresaLogo) data.append('logo', nuevaEmpresaLogo);
       await api.post(`${API_URL}/empresas`, data);
-      toast.success('✅ Empresa creada correctamente');
+      toast.success('✅ Empresa y administrador creados correctamente');
       setNuevaEmpresaNombre('');
       setNuevaEmpresaLogo(null);
+      setNuevaEmpresaAdmin({ num_empleado: '', nombre: '', password: '' });
       cargarEmpresas();
     } catch (error) {
-      toast.error('❌ Error al crear empresa');
+      toast.error(`❌ ${error.response?.data?.error || 'Error al crear empresa'}`);
     }
   };
 
@@ -1473,6 +1478,29 @@ function App() {
                     accept="image/*"
                     onChange={(e) => setNuevaEmpresaLogo(e.target.files[0])}
                     style={styles.cardInput}
+                  />
+                  <p style={styles.patientInfo}>Primer administrador de la empresa:</p>
+                  <input
+                    placeholder="Número de empleado *"
+                    value={nuevaEmpresaAdmin.num_empleado}
+                    onChange={(e) => setNuevaEmpresaAdmin({ ...nuevaEmpresaAdmin, num_empleado: e.target.value })}
+                    style={styles.cardInput}
+                    required
+                  />
+                  <input
+                    placeholder="Nombre completo *"
+                    value={nuevaEmpresaAdmin.nombre}
+                    onChange={(e) => setNuevaEmpresaAdmin({ ...nuevaEmpresaAdmin, nombre: e.target.value })}
+                    style={styles.cardInput}
+                    required
+                  />
+                  <input
+                    type="password"
+                    placeholder="Contraseña *"
+                    value={nuevaEmpresaAdmin.password}
+                    onChange={(e) => setNuevaEmpresaAdmin({ ...nuevaEmpresaAdmin, password: e.target.value })}
+                    style={styles.cardInput}
+                    required
                   />
                   <button type="submit" style={styles.createButton}>Crear Empresa</button>
                 </form>

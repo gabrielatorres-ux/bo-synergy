@@ -68,9 +68,12 @@ app.get('/api/empresas/by-slug/:slug', async (req, res) => {
 });
 
 app.post('/api/empresas', upload.single('logo'), async (req, res) => {
-  const { nombre } = req.body;
+  const { nombre, admin_num_empleado, admin_nombre, admin_password } = req.body;
   if (!nombre) {
     return res.status(400).json({ error: 'El nombre es requerido' });
+  }
+  if (!admin_num_empleado || !admin_nombre || !admin_password) {
+    return res.status(400).json({ error: 'Los datos del administrador de la empresa son requeridos' });
   }
   try {
     // Sube el logo ANTES de crear la fila: si la subida falla, no queda
@@ -81,8 +84,20 @@ app.post('/api/empresas', upload.single('logo'), async (req, res) => {
       'INSERT INTO empresas (nombre, logo_url, slug) VALUES ($1, $2, $3) RETURNING id',
       [nombre, logoUrl, slug]
     );
-    res.json({ id: result.rows[0].id, slug, message: 'Empresa creada correctamente' });
+    const empresaId = result.rows[0].id;
+    // Se crea también el primer usuario admin: sin esto no habría forma de
+    // entrar a la empresa nueva (nadie de ahí existe todavía para crear
+    // a los demás usuarios).
+    await queryRun(
+      `INSERT INTO usuarios (num_empleado, nombre, rol, password, empresa_id, fecha_registro)
+       VALUES ($1, $2, 'admin', $3, $4, NOW())`,
+      [admin_num_empleado, admin_nombre, admin_password, empresaId]
+    );
+    res.json({ id: empresaId, slug, message: 'Empresa creada correctamente' });
   } catch (error) {
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'El número de empleado del administrador ya existe' });
+    }
     res.status(500).json({ error: error.message });
   }
 });

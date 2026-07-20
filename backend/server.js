@@ -147,6 +147,21 @@ app.patch('/api/empresas/:id/aprobar', async (req, res) => {
   }
 });
 
+app.delete('/api/empresas/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const pacientesCount = await queryOne('SELECT COUNT(*) as total FROM pacientes WHERE empresa_id = $1', [id]);
+    if (parseInt(pacientesCount.total) > 0) {
+      return res.status(400).json({ error: 'No se puede eliminar una empresa con pacientes registrados' });
+    }
+    await queryRun('DELETE FROM usuarios WHERE empresa_id = $1', [id]);
+    await queryRun('DELETE FROM empresas WHERE id = $1', [id]);
+    res.json({ message: 'Empresa eliminada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.put('/api/empresas/:id', upload.single('logo'), async (req, res) => {
   const { id } = req.params;
   const { nombre } = req.body;

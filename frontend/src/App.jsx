@@ -380,6 +380,17 @@ function App() {
     }
   };
 
+  const handleEliminarEmpresa = async (id, nombre) => {
+    if (!confirm(`¿Estás seguro de eliminar la empresa ${nombre}? Esto también elimina a sus usuarios.`)) return;
+    try {
+      await api.delete(`${API_URL}/empresas/${id}`);
+      toast.success('✅ Empresa eliminada correctamente');
+      cargarEmpresas();
+    } catch (error) {
+      toast.error(`❌ ${error.response?.data?.error || 'Error al eliminar empresa'}`);
+    }
+  };
+
   const handleActualizarMiEmpresa = async (e) => {
     e.preventDefault();
     try {
@@ -1619,9 +1630,12 @@ function App() {
                           )}
                           <span style={styles.userDetail}>{window.location.origin}/login/{emp.slug}</span>
                         </div>
-                        {!emp.activo && (
-                          <button onClick={() => handleAprobarEmpresa(emp.id)} style={styles.createButton}>✅ Aprobar</button>
-                        )}
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          {!emp.activo && (
+                            <button onClick={() => handleAprobarEmpresa(emp.id)} style={styles.createButton}>✅ Aprobar</button>
+                          )}
+                          <button onClick={() => handleEliminarEmpresa(emp.id, emp.nombre)} style={styles.deleteButton}>🗑️</button>
+                        </div>
                       </li>
                     ))}
                   </ul>

@@ -13,8 +13,8 @@ app.use(express.json());
 
 // ==================== RUTAS DE EMPRESAS ====================
 
-const subirLogo = async (empresaId, file) => {
-  const nombreArchivo = `${empresaId}-${Date.now()}.${file.originalname.split('.').pop()}`;
+const subirLogo = async (file) => {
+  const nombreArchivo = `${Date.now()}-${Math.random().toString(36).slice(2)}.${file.originalname.split('.').pop()}`;
   const { error } = await supabase.storage.from('logos').upload(nombreArchivo, file.buffer, {
     contentType: file.mimetype,
     upsert: true
@@ -39,16 +39,14 @@ app.post('/api/empresas', upload.single('logo'), async (req, res) => {
     return res.status(400).json({ error: 'El nombre es requerido' });
   }
   try {
+    // Sube el logo ANTES de crear la fila: si la subida falla, no queda
+    // una empresa huérfana sin logo en la base de datos.
+    const logoUrl = req.file ? await subirLogo(req.file) : null;
     const result = await queryRun(
-      'INSERT INTO empresas (nombre) VALUES ($1) RETURNING id',
-      [nombre]
+      'INSERT INTO empresas (nombre, logo_url) VALUES ($1, $2) RETURNING id',
+      [nombre, logoUrl]
     );
-    const id = result.rows[0].id;
-    if (req.file) {
-      const logoUrl = await subirLogo(id, req.file);
-      await queryRun('UPDATE empresas SET logo_url = $1 WHERE id = $2', [logoUrl, id]);
-    }
-    res.json({ id, message: 'Empresa creada correctamente' });
+    res.json({ id: result.rows[0].id, message: 'Empresa creada correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -59,7 +57,7 @@ app.put('/api/empresas/:id', upload.single('logo'), async (req, res) => {
   const { nombre } = req.body;
   try {
     if (req.file) {
-      const logoUrl = await subirLogo(id, req.file);
+      const logoUrl = await subirLogo(req.file);
       await queryRun('UPDATE empresas SET nombre = $1, logo_url = $2 WHERE id = $3', [nombre, logoUrl, id]);
     } else {
       await queryRun('UPDATE empresas SET nombre = $1 WHERE id = $2', [nombre, id]);

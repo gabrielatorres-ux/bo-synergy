@@ -34,7 +34,7 @@ function Dashboard() {
   const [pacientesPorArea, setPacientesPorArea] = useState([]);
   const [cargando, setCargando] = useState(true);
 
-  const API_URL = 'http://localhost:3000/api';
+  const API_URL = 'https://bo-synergy-backend.onrender.com/api';
 
   useEffect(() => {
     cargarDatos();

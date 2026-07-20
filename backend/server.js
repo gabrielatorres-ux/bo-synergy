@@ -78,7 +78,7 @@ app.get('/api/consultas/:pacienteId', async (req, res) => {
 
 app.post('/api/consultas', async (req, res) => {
   const { 
-    paciente_id, fecha, motivo, alergias, cabeza, cuello, torax, abdomen, espalda,
+    paciente_id, fecha, motivo, alergias, alergias_detalle, cabeza, cuello, torax, abdomen, espalda,
     extremidades_superiores, extremidades_inferiores, ojos_oidos_garganta, causa,
     impresion_diagnostica, medicamentos, receta, cie10 
   } = req.body;
@@ -86,11 +86,11 @@ app.post('/api/consultas', async (req, res) => {
   try {
     const result = await queryRun(
       `INSERT INTO consultas (
-        paciente_id, fecha, motivo, alergias, cabeza, cuello, torax, abdomen, espalda,
+        paciente_id, fecha, motivo, alergias, alergias_detalle, cabeza, cuello, torax, abdomen, espalda,
         extremidades_superiores, extremidades_inferiores, ojos_oidos_garganta, causa,
         impresion_diagnostica, medicamentos, receta, cie10
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
-      [paciente_id, fecha, motivo, alergias, cabeza, cuello, torax, abdomen, espalda,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
+      [paciente_id, fecha, motivo, alergias, alergias_detalle || null, cabeza, cuello, torax, abdomen, espalda,
         extremidades_superiores, extremidades_inferiores, ojos_oidos_garganta, causa,
         impresion_diagnostica, medicamentos, receta, cie10]
     );
@@ -103,7 +103,7 @@ app.post('/api/consultas', async (req, res) => {
 app.put('/api/consultas/:id', async (req, res) => {
   const { id } = req.params;
   const { 
-    fecha, motivo, alergias, cabeza, cuello, torax, abdomen, espalda,
+    fecha, motivo, alergias, alergias_detalle, cabeza, cuello, torax, abdomen, espalda,
     extremidades_superiores, extremidades_inferiores, ojos_oidos_garganta, causa,
     impresion_diagnostica, medicamentos, receta, cie10 
   } = req.body;
@@ -111,12 +111,12 @@ app.put('/api/consultas/:id', async (req, res) => {
   try {
     await queryRun(
       `UPDATE consultas 
-       SET fecha = $1, motivo = $2, alergias = $3, cabeza = $4, cuello = $5, torax = $6, abdomen = $7, 
-           espalda = $8, extremidades_superiores = $9, extremidades_inferiores = $10, 
-           ojos_oidos_garganta = $11, causa = $12, impresion_diagnostica = $13, 
-           medicamentos = $14, receta = $15, cie10 = $16
-       WHERE id = $17`,
-      [fecha, motivo, alergias, cabeza, cuello, torax, abdomen, espalda,
+       SET fecha = $1, motivo = $2, alergias = $3, alergias_detalle = $4, cabeza = $5, cuello = $6, torax = $7, 
+           abdomen = $8, espalda = $9, extremidades_superiores = $10, extremidades_inferiores = $11, 
+           ojos_oidos_garganta = $12, causa = $13, impresion_diagnostica = $14, 
+           medicamentos = $15, receta = $16, cie10 = $17
+       WHERE id = $18`,
+      [fecha, motivo, alergias, alergias_detalle || null, cabeza, cuello, torax, abdomen, espalda,
         extremidades_superiores, extremidades_inferiores, ojos_oidos_garganta, causa,
         impresion_diagnostica, medicamentos, receta, cie10, id]
     );

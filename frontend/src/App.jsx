@@ -602,28 +602,29 @@ function App() {
   const generarRecetaPDF = (consulta, paciente) => {
     const doc = new jsPDF();
     const fecha = new Date().toLocaleDateString('es-MX');
-    
+
     doc.setFontSize(20);
     doc.text('🏥 BO Synergy', 105, 20, { align: 'center' });
     doc.setFontSize(16);
     doc.text('R E C E T A   M É D I C A', 105, 30, { align: 'center' });
     doc.line(20, 35, 190, 35);
-    
+
     doc.setFontSize(12);
     doc.text(`Fecha: ${fecha}`, 20, 45);
     doc.text(`Paciente: ${paciente.nombre}`, 20, 55);
     doc.text(`Número de Empleado: ${paciente.num_empleado}`, 20, 65);
     doc.text(`Área: ${paciente.area || 'No especificada'}`, 20, 75);
-    
+
     doc.text('---', 20, 88);
     doc.setFontSize(14);
     doc.text('Medicamentos Recetados:', 20, 100);
     doc.setFontSize(12);
-    
-    const medicamentos = (consulta.medicamentos && typeof consulta.medicamentos === 'string') 
-  ? consulta.medicamentos.split(',').map(m => m.trim()) 
+
+    const medicamentos = (consulta.medicamentos && typeof consulta.medicamentos === 'string')
+  ? consulta.medicamentos.split(',').map(m => m.trim())
   : ['No se recetaron medicamentos'];
 
+    let yPos = 110;
     medicamentos.forEach((med, i) => {
       doc.text(`${i + 1}. ${med}`, 25, yPos);
       yPos += 10;

@@ -333,6 +333,17 @@ function App() {
     }
   };
 
+  const handleResetearPassword = async (id, numEmpleado) => {
+    const nuevaPassword = prompt(`Nueva contraseña para ${numEmpleado}:`);
+    if (!nuevaPassword) return;
+    try {
+      await api.patch(`${API_URL}/usuarios/${id}/resetear-password`, { nueva_password: nuevaPassword });
+      toast.success(`Contraseña de ${numEmpleado} actualizada`);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Error al restablecer la contraseña');
+    }
+  };
+
   const handleCambioUsuario = (e) => {
     setNuevoUsuario({
       ...nuevoUsuario,
@@ -1518,7 +1529,10 @@ function App() {
                           </span>
                           <span style={styles.userDate}>{new Date(u.fecha_registro).toLocaleDateString('es-MX')}</span>
                         </div>
-                        <button onClick={() => handleEliminarUsuario(u.id, u.num_empleado)} style={styles.deleteButton} disabled={u.num_empleado === 'ADMIN001'}>Eliminar</button>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button onClick={() => handleResetearPassword(u.id, u.num_empleado)} style={styles.resetPasswordButton}>Restablecer contraseña</button>
+                          <button onClick={() => handleEliminarUsuario(u.id, u.num_empleado)} style={styles.deleteButton} disabled={u.num_empleado === 'ADMIN001'}>Eliminar</button>
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -2435,6 +2449,10 @@ const styles = {
   },
   editButton: {
     ...pastelButton(pastelTeal.bg, pastelTeal.text),
+    padding: '6px 12px',
+  },
+  resetPasswordButton: {
+    ...pastelButton(pastelBlue.bg, pastelBlue.text),
     padding: '6px 12px',
   },
   consultaButton: {

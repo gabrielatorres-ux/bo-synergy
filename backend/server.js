@@ -565,6 +565,22 @@ app.delete('/api/usuarios/:id', async (req, res) => {
   }
 });
 
+app.patch('/api/usuarios/:id/resetear-password', async (req, res) => {
+  const { id } = req.params;
+  const { nueva_password, empresa_id } = req.body;
+
+  if (!nueva_password) {
+    return res.status(400).json({ error: 'La nueva contraseña es requerida' });
+  }
+
+  try {
+    await queryRun('UPDATE usuarios SET password = $1 WHERE id = $2 AND empresa_id = $3', [nueva_password, id, empresa_id]);
+    res.json({ message: 'Contraseña actualizada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== RUTAS DE ESTADÍSTICAS ====================
 
 app.get('/api/estadisticas', async (req, res) => {

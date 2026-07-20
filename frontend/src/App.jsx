@@ -2077,6 +2077,28 @@ const ghostButton = {
   fontFamily: fontBody,
 };
 
+const pastelButton = (bg, text) => ({
+  background: bg,
+  color: text,
+  border: 'none',
+  padding: '8px 16px',
+  borderRadius: '4px',
+  cursor: 'pointer',
+  fontSize: '13px',
+  fontWeight: '500',
+  whiteSpace: 'nowrap',
+  transition: 'opacity 0.2s',
+  fontFamily: fontBody,
+});
+
+const pastelBlue = { bg: '#E1EDFB', text: '#1E4E8C' };
+const pastelPurple = { bg: '#EFE7F9', text: '#5C3E85' };
+const pastelPink = { bg: '#FBE5F0', text: '#9C3D6E' };
+const pastelYellow = { bg: '#FCF3CE', text: '#8A6D14' };
+const pastelTeal = { bg: '#DFF3F0', text: '#1B6E63' };
+const pastelOrange = { bg: '#FCE7D2', text: '#9C5A16' };
+const pastelRed = { bg: dangerLight, text: danger };
+
 const styles = {
   loginContainer: {
     display: 'flex',
@@ -2342,17 +2364,7 @@ const styles = {
     boxSizing: 'border-box',
   },
   exportButton: {
-    background: '#D9720E',
-    color: 'white',
-    border: 'none',
-    padding: '8px 16px',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '13px',
-    fontWeight: '500',
-    whiteSpace: 'nowrap',
-    transition: 'background 0.2s',
-    fontFamily: fontBody,
+    ...pastelButton(pastelOrange.bg, pastelOrange.text),
     alignSelf: 'center',
   },
   sectionTitle: {
@@ -2418,17 +2430,11 @@ const styles = {
     fontSize: '12px',
   },
   deleteButton: {
-    background: danger,
-    color: 'white',
-    border: 'none',
+    ...pastelButton(pastelRed.bg, pastelRed.text),
     padding: '6px 12px',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '13px',
-    transition: 'background 0.2s',
   },
   editButton: {
-    ...ghostButton,
+    ...pastelButton(pastelTeal.bg, pastelTeal.text),
     padding: '6px 12px',
   },
   consultaButton: {
@@ -2444,22 +2450,22 @@ const styles = {
     transition: 'background 0.2s',
   },
   emiButton: {
-    ...ghostButton,
+    ...pastelButton(pastelBlue.bg, pastelBlue.text),
     padding: '6px 10px',
     fontSize: '11px',
   },
   empButton: {
-    ...ghostButton,
+    ...pastelButton(pastelPurple.bg, pastelPurple.text),
     padding: '6px 10px',
     fontSize: '11px',
   },
   emrButton: {
-    ...ghostButton,
+    ...pastelButton(pastelPink.bg, pastelPink.text),
     padding: '6px 10px',
     fontSize: '11px',
   },
   vulnerabilidadButton: {
-    ...ghostButton,
+    ...pastelButton(pastelYellow.bg, pastelYellow.text),
     padding: '6px 10px',
     fontSize: '11px',
   },
@@ -2567,19 +2573,14 @@ const styles = {
     border: `1px solid ${borderLight}`,
   },
   editButtonSmall: {
-    ...ghostButton,
+    ...pastelButton(pastelTeal.bg, pastelTeal.text),
     padding: '4px 10px',
     fontSize: '12px',
   },
   deleteButtonSmall: {
-    background: danger,
-    color: 'white',
-    border: 'none',
+    ...pastelButton(pastelRed.bg, pastelRed.text),
     padding: '4px 10px',
-    borderRadius: '4px',
-    cursor: 'pointer',
     fontSize: '12px',
-    transition: 'background 0.2s',
   },
   pdfButtonGreen: {
     ...ghostButton,
@@ -2597,17 +2598,9 @@ const styles = {
     fontSize: '11px',
   },
   exportButtonSmall: {
-    background: '#D9720E',
-    color: 'white',
-    border: 'none',
+    ...pastelButton(pastelOrange.bg, pastelOrange.text),
     padding: '4px 12px',
-    borderRadius: '4px',
-    cursor: 'pointer',
     fontSize: '12px',
-    fontWeight: '500',
-    whiteSpace: 'nowrap',
-    transition: 'background 0.2s',
-    fontFamily: fontBody,
   },
   emailButtonGreen: {
     ...ghostButton,

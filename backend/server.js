@@ -245,12 +245,12 @@ app.get('/api/pacientes', async (req, res) => {
 });
 
 app.post('/api/pacientes', async (req, res) => {
-  const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id } = req.body;
+  const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle } = req.body;
   try {
     const result = await queryRun(
-      `INSERT INTO pacientes (num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-      [num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id]
+      `INSERT INTO pacientes (num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+      [num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle]
     );
     res.json({ id: result.rows[0]?.id || result.insertId, message: 'Paciente agregado correctamente' });
   } catch (error) {
@@ -263,13 +263,13 @@ app.post('/api/pacientes', async (req, res) => {
 
 app.put('/api/pacientes/:id', async (req, res) => {
   const { id } = req.params;
-  const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id } = req.body;
+  const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle } = req.body;
   try {
     await queryRun(
       `UPDATE pacientes
-       SET num_empleado = $1, nombre = $2, fecha_nac = $3, nss = $4, contacto_emergencia = $5, puesto = $6, area = $7, supervisor = $8
-       WHERE id = $9 AND empresa_id = $10`,
-      [num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, id, empresa_id]
+       SET num_empleado = $1, nombre = $2, fecha_nac = $3, nss = $4, contacto_emergencia = $5, puesto = $6, area = $7, supervisor = $8, alergias = $9, alergias_detalle = $10
+       WHERE id = $11 AND empresa_id = $12`,
+      [num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, alergias, alergias_detalle, id, empresa_id]
     );
     res.json({ message: 'Paciente actualizado correctamente' });
   } catch (error) {

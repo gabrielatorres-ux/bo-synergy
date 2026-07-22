@@ -6,3 +6,8 @@
 
 ALTER TABLE seguimientos ADD COLUMN IF NOT EXISTS cie10 TEXT;
 ALTER TABLE seguimientos ADD COLUMN IF NOT EXISTS tratamiento TEXT;
+
+-- 3) Alergias como dato fijo del expediente del paciente (se muestra en la
+--    lista de Pacientes Registrados en vez del número de empleado).
+ALTER TABLE pacientes ADD COLUMN IF NOT EXISTS alergias BOOLEAN DEFAULT false;
+ALTER TABLE pacientes ADD COLUMN IF NOT EXISTS alergias_detalle TEXT;

@@ -81,7 +81,9 @@ function App() {
     contacto_emergencia: '',
     puesto: '',
     area: '',
-    supervisor: ''
+    supervisor: '',
+    alergias: 'no',
+    alergias_detalle: ''
   });
   const [usuarios, setUsuarios] = useState([]);
   const [asistencias, setAsistencias] = useState([]);
@@ -384,7 +386,10 @@ function App() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await api.post(`${API_URL}/pacientes`, formData);
+      await api.post(`${API_URL}/pacientes`, {
+        ...formData,
+        alergias: formData.alergias === 'si'
+      });
       toast.success('Paciente agregado');
       setFormData({
         num_empleado: '',
@@ -394,7 +399,9 @@ function App() {
         contacto_emergencia: '',
         puesto: '',
         area: '',
-        supervisor: ''
+        supervisor: '',
+        alergias: 'no',
+        alergias_detalle: ''
       });
       cargarPacientes(paginaPacientes);
     } catch (error) {
@@ -424,7 +431,9 @@ function App() {
       contacto_emergencia: paciente.contacto_emergencia || '',
       puesto: paciente.puesto || '',
       area: paciente.area || '',
-      supervisor: paciente.supervisor || ''
+      supervisor: paciente.supervisor || '',
+      alergias: paciente.alergias ? 'si' : 'no',
+      alergias_detalle: paciente.alergias_detalle || ''
     });
     setMostrarModalEditar(true);
   };
@@ -432,7 +441,10 @@ function App() {
   const handleActualizarPaciente = async (e) => {
     e.preventDefault();
     try {
-      await api.put(`${API_URL}/pacientes/${pacienteEditando.id}`, formData);
+      await api.put(`${API_URL}/pacientes/${pacienteEditando.id}`, {
+        ...formData,
+        alergias: formData.alergias === 'si'
+      });
       toast.success('Paciente actualizado correctamente');
       setMostrarModalEditar(false);
       setPacienteEditando(null);
@@ -444,7 +456,9 @@ function App() {
         contacto_emergencia: '',
         puesto: '',
         area: '',
-        supervisor: ''
+        supervisor: '',
+        alergias: 'no',
+        alergias_detalle: ''
       });
       cargarPacientes(paginaPacientes);
     } catch (error) {
@@ -1595,7 +1609,9 @@ function App() {
       'Contacto Emergencia': p.contacto_emergencia || '',
       'Puesto': p.puesto || '',
       'Área': p.area || '',
-      'Supervisor': p.supervisor || ''
+      'Supervisor': p.supervisor || '',
+      'Alergias': p.alergias ? 'Sí' : 'No',
+      'Detalle de Alergias': p.alergias_detalle || ''
     }));
 
     const wb = XLSX.utils.book_new();
@@ -1604,7 +1620,8 @@ function App() {
     
     const colWidths = [
       { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 15 },
-      { wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 20 }
+      { wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 20 },
+      { wch: 12 }, { wch: 25 }
     ];
     ws['!cols'] = colWidths;
 
@@ -2206,6 +2223,16 @@ function App() {
               <input name="puesto" placeholder="Puesto" value={formData.puesto} onChange={handleChange} style={styles.cardInput} />
               <input name="area" placeholder="Área" value={formData.area} onChange={handleChange} style={styles.cardInput} />
               <input name="supervisor" placeholder="Supervisor" value={formData.supervisor} onChange={handleChange} style={styles.cardInput} />
+              <label style={styles.inlineLabel}>
+                ¿Tiene alergias?
+                <select name="alergias" value={formData.alergias} onChange={handleChange} style={styles.cardInput}>
+                  <option value="no">No</option>
+                  <option value="si">Sí</option>
+                </select>
+              </label>
+              {formData.alergias === 'si' && (
+                <input name="alergias_detalle" placeholder="Especifique las alergias" value={formData.alergias_detalle} onChange={handleChange} style={styles.cardInput} />
+              )}
               <button type="submit" style={styles.saveButton}>Guardar Paciente</button>
             </form>
           </div>
@@ -2237,7 +2264,7 @@ function App() {
                       <div>
                         <strong>{p.nombre}</strong>
                         <span style={styles.patientInfo}>
-                          Empleado: {p.num_empleado} - Área: {p.area}
+                          Alergias: {p.alergias ? `Sí${p.alergias_detalle ? ` (${p.alergias_detalle})` : ''}` : 'No'} - Área: {p.area}
                         </span>
                       </div>
                       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
@@ -3051,6 +3078,16 @@ function App() {
                 <input name="puesto" placeholder="Puesto" value={formData.puesto} onChange={handleChange} style={styles.cardInput} />
                 <input name="area" placeholder="Área" value={formData.area} onChange={handleChange} style={styles.cardInput} />
                 <input name="supervisor" placeholder="Supervisor" value={formData.supervisor} onChange={handleChange} style={styles.cardInput} />
+                <label style={styles.inlineLabel}>
+                  ¿Tiene alergias?
+                  <select name="alergias" value={formData.alergias} onChange={handleChange} style={styles.cardInput}>
+                    <option value="no">No</option>
+                    <option value="si">Sí</option>
+                  </select>
+                </label>
+                {formData.alergias === 'si' && (
+                  <input name="alergias_detalle" placeholder="Especifique las alergias" value={formData.alergias_detalle} onChange={handleChange} style={styles.cardInput} />
+                )}
                 <div style={styles.buttonRow}>
                   <button type="button" onClick={() => setMostrarModalEditar(false)} style={styles.cancelButton}>Cancelar</button>
                   <button type="submit" style={styles.saveButton}>Actualizar Paciente</button>

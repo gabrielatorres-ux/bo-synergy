@@ -1331,6 +1331,7 @@ function App() {
                     style={styles.input}
                     required
                   />
+                  <p style={styles.welcomeText}>Logo de tu empresa (opcional)</p>
                   <input
                     type="file"
                     accept="image/*"
@@ -1354,7 +1355,7 @@ function App() {
                     required
                   />
                   <input
-                    placeholder="Tu número de empleado *"
+                    placeholder="Usuario *"
                     value={registroForm.admin_num_empleado}
                     onChange={(e) => setRegistroForm({ ...registroForm, admin_num_empleado: e.target.value })}
                     style={styles.input}

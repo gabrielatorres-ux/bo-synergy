@@ -71,12 +71,12 @@ app.get('/api/empresas/by-slug/:slug', async (req, res) => {
 // forma de entrar a una empresa nueva: nadie de ahí existiría todavía
 // para crear a los demás usuarios). `activo=false` se usa para el
 // auto-registro público, que queda pendiente de aprobación.
-const crearEmpresaConAdmin = async ({ nombre, file, adminNumEmpleado, adminNombre, adminPassword, activo }) => {
+const crearEmpresaConAdmin = async ({ nombre, correo, celular, file, adminNumEmpleado, adminNombre, adminPassword, activo }) => {
   const logoUrl = file ? await subirLogo(file) : null;
   const slug = await generarSlugUnico(nombre);
   const result = await queryRun(
-    'INSERT INTO empresas (nombre, logo_url, slug, activo) VALUES ($1, $2, $3, $4) RETURNING id',
-    [nombre, logoUrl, slug, activo]
+    'INSERT INTO empresas (nombre, logo_url, slug, activo, correo, celular) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+    [nombre, logoUrl, slug, activo, correo || null, celular || null]
   );
   const empresaId = result.rows[0].id;
   await queryRun(
@@ -88,7 +88,7 @@ const crearEmpresaConAdmin = async ({ nombre, file, adminNumEmpleado, adminNombr
 };
 
 app.post('/api/empresas', upload.single('logo'), async (req, res) => {
-  const { nombre, admin_num_empleado, admin_nombre, admin_password } = req.body;
+  const { nombre, correo, celular, admin_num_empleado, admin_nombre, admin_password } = req.body;
   if (!nombre) {
     return res.status(400).json({ error: 'El nombre es requerido' });
   }
@@ -98,6 +98,8 @@ app.post('/api/empresas', upload.single('logo'), async (req, res) => {
   try {
     const { empresaId, slug } = await crearEmpresaConAdmin({
       nombre,
+      correo,
+      celular,
       file: req.file,
       adminNumEmpleado: admin_num_empleado,
       adminNombre: admin_nombre,
@@ -116,13 +118,15 @@ app.post('/api/empresas', upload.single('logo'), async (req, res) => {
 // Pública: una empresa se auto-registra pero queda inactiva hasta que el
 // superadmin la apruebe desde "Gestión de Empresas".
 app.post('/api/empresas/solicitar-registro', upload.single('logo'), async (req, res) => {
-  const { nombre, admin_num_empleado, admin_nombre, admin_password } = req.body;
-  if (!nombre || !admin_num_empleado || !admin_nombre || !admin_password) {
+  const { nombre, correo, celular, admin_num_empleado, admin_nombre, admin_password } = req.body;
+  if (!nombre || !correo || !celular || !admin_num_empleado || !admin_nombre || !admin_password) {
     return res.status(400).json({ error: 'Todos los campos son requeridos' });
   }
   try {
     await crearEmpresaConAdmin({
       nombre,
+      correo,
+      celular,
       file: req.file,
       adminNumEmpleado: admin_num_empleado,
       adminNombre: admin_nombre,
@@ -498,6 +502,13 @@ app.post('/api/login', async (req, res) => {
     if (!result.empresa_activa) {
       return res.status(403).json({ error: 'Tu empresa está pendiente de aprobación. Te avisaremos cuando esté activa.' });
     }
+    // Reloj checador: cada login exitoso queda registrado como checada de
+    // entrada. Un fallo aquí no debe tumbar el login.
+    try {
+      await queryRun('INSERT INTO asistencias (usuario_id, empresa_id) VALUES ($1, $2)', [result.id, result.empresa_id]);
+    } catch (asistenciaError) {
+      console.error('Error al registrar asistencia:', asistenciaError.message);
+    }
     const { password: _, empresa_activa: __, ...userWithoutPassword } = result;
     res.json({
       success: true,
@@ -516,6 +527,24 @@ app.get('/api/usuarios', async (req, res) => {
     const { empresa_id } = req.query;
     const result = await query(
       'SELECT id, num_empleado, nombre, rol, fecha_registro FROM usuarios WHERE empresa_id = $1',
+      [empresa_id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/asistencias', async (req, res) => {
+  try {
+    const { empresa_id } = req.query;
+    const result = await query(
+      `SELECT a.id, a.fecha_hora, u.nombre, u.num_empleado, u.rol
+       FROM asistencias a
+       JOIN usuarios u ON a.usuario_id = u.id
+       WHERE a.empresa_id = $1
+       ORDER BY a.fecha_hora DESC
+       LIMIT 200`,
       [empresa_id]
     );
     res.json(result.rows);

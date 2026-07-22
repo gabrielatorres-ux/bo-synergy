@@ -18,8 +18,9 @@ function App() {
   const [empresaLogin, setEmpresaLogin] = useState(null);
   const [mostrarRegistro, setMostrarRegistro] = useState(false);
   const [registroEnviado, setRegistroEnviado] = useState(false);
-  const [registroForm, setRegistroForm] = useState({ nombre: '', admin_num_empleado: '', admin_nombre: '', admin_password: '' });
+  const [registroForm, setRegistroForm] = useState({ nombre: '', correo: '', celular: '', admin_num_empleado: '', admin_nombre: '', admin_password: '' });
   const [registroLogo, setRegistroLogo] = useState(null);
+  const [tasasCambio, setTasasCambio] = useState(null);
   const [pacientes, setPacientes] = useState([]);
   const [busquedaPaciente, setBusquedaPaciente] = useState('');
   const [paginaPacientes, setPaginaPacientes] = useState(1);
@@ -35,6 +36,7 @@ function App() {
     supervisor: ''
   });
   const [usuarios, setUsuarios] = useState([]);
+  const [asistencias, setAsistencias] = useState([]);
   const [nuevoUsuario, setNuevoUsuario] = useState({
     num_empleado: '',
     nombre: '',
@@ -98,6 +100,22 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Tipo de cambio en vivo para mostrar los planes en COP/USD además de
+  // MXN. Si la API externa falla, se usa un aproximado como respaldo.
+  useEffect(() => {
+    if (!mostrarRegistro || tasasCambio) return;
+    axios.get('https://open.er-api.com/v6/latest/MXN')
+      .then((response) => {
+        const rates = response.data?.rates;
+        if (rates?.USD && rates?.COP) {
+          setTasasCambio({ usd: rates.USD, cop: rates.COP });
+        } else {
+          setTasasCambio({ usd: 0.055, cop: 220 });
+        }
+      })
+      .catch(() => setTasasCambio({ usd: 0.055, cop: 220 }));
+  }, [mostrarRegistro, tasasCambio]);
+
   // Agrega automáticamente el empresa_id del usuario logueado a cada
   // petición, para que el backend filtre los datos de esa empresa.
   useEffect(() => {
@@ -124,6 +142,7 @@ function App() {
     cargarPacientes(1, '');
     if (usuario.rol === 'admin') {
       cargarUsuarios();
+      cargarAsistencias();
     }
     if (usuario.es_superadmin) {
       cargarEmpresas();
@@ -160,6 +179,8 @@ function App() {
     try {
       const data = new FormData();
       data.append('nombre', registroForm.nombre);
+      data.append('correo', registroForm.correo);
+      data.append('celular', registroForm.celular);
       data.append('admin_num_empleado', registroForm.admin_num_empleado);
       data.append('admin_nombre', registroForm.admin_nombre);
       data.append('admin_password', registroForm.admin_password);
@@ -288,6 +309,15 @@ function App() {
       setUsuarios(response.data);
     } catch (error) {
       console.error('Error al cargar usuarios:', error);
+    }
+  };
+
+  const cargarAsistencias = async () => {
+    try {
+      const response = await api.get(`${API_URL}/asistencias`);
+      setAsistencias(response.data);
+    } catch (error) {
+      console.error('Error al cargar asistencias:', error);
     }
   };
 
@@ -1227,7 +1257,7 @@ function App() {
           }}
         />
         <div style={styles.loginContainer}>
-          <div style={styles.loginBox}>
+          <div style={mostrarRegistro && !registroEnviado ? styles.registroBox : styles.loginBox}>
             {empresaLogin?.logo_url ? (
               <img src={empresaLogin.logo_url} alt={empresaLogin.nombre} style={styles.loginLogo} />
             ) : (
@@ -1269,49 +1299,90 @@ function App() {
                 </p>
               </div>
             ) : (
-              <form onSubmit={handleSolicitarRegistro}>
-                <input
-                  placeholder="Nombre de tu empresa *"
-                  value={registroForm.nombre}
-                  onChange={(e) => setRegistroForm({ ...registroForm, nombre: e.target.value })}
-                  style={styles.input}
-                  required
-                />
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setRegistroLogo(e.target.files[0])}
-                  style={styles.input}
-                />
-                <input
-                  placeholder="Tu número de empleado *"
-                  value={registroForm.admin_num_empleado}
-                  onChange={(e) => setRegistroForm({ ...registroForm, admin_num_empleado: e.target.value })}
-                  style={styles.input}
-                  required
-                />
-                <input
-                  placeholder="Tu nombre completo *"
-                  value={registroForm.admin_nombre}
-                  onChange={(e) => setRegistroForm({ ...registroForm, admin_nombre: e.target.value })}
-                  style={styles.input}
-                  required
-                />
-                <input
-                  type="password"
-                  placeholder="Contraseña *"
-                  value={registroForm.admin_password}
-                  onChange={(e) => setRegistroForm({ ...registroForm, admin_password: e.target.value })}
-                  style={styles.input}
-                  required
-                />
-                <button type="submit" style={styles.loginButton}>Solicitar Registro</button>
-                <p style={styles.welcomeText}>
-                  <a href="#" onClick={(e) => { e.preventDefault(); setMostrarRegistro(false); }}>
-                    ← Ya tengo cuenta, quiero iniciar sesión
-                  </a>
-                </p>
-              </form>
+              <>
+                <div style={styles.videoPlaceholder}>
+                  Video próximamente: cómo funciona, cuánto tiempo toma y precio
+                </div>
+
+                <div style={styles.pricingGrid}>
+                  {[
+                    { nombre: 'Core', detalle: '20 registros/mes', mxn: 150 },
+                    { nombre: 'Plus', detalle: '100 registros/mes', mxn: 1500 },
+                    { nombre: 'Unlimited', detalle: 'Registros ilimitados', mxn: 5000 },
+                  ].map((plan) => (
+                    <div key={plan.nombre} style={styles.pricingCard}>
+                      <h4 style={styles.pricingName}>{plan.nombre}</h4>
+                      <p style={styles.pricingDetail}>{plan.detalle}</p>
+                      <p style={styles.pricingPrice}>${plan.mxn.toLocaleString('es-MX')} MXN</p>
+                      <p style={styles.pricingConverted}>
+                        {tasasCambio
+                          ? `≈ $${(plan.mxn * tasasCambio.usd).toFixed(2)} USD · $${Math.round(plan.mxn * tasasCambio.cop).toLocaleString('es-MX')} COP`
+                          : 'Calculando tipo de cambio…'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <form onSubmit={handleSolicitarRegistro}>
+                  <input
+                    placeholder="Nombre de tu empresa *"
+                    value={registroForm.nombre}
+                    onChange={(e) => setRegistroForm({ ...registroForm, nombre: e.target.value })}
+                    style={styles.input}
+                    required
+                  />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setRegistroLogo(e.target.files[0])}
+                    style={styles.input}
+                  />
+                  <input
+                    type="email"
+                    placeholder="Correo *"
+                    value={registroForm.correo}
+                    onChange={(e) => setRegistroForm({ ...registroForm, correo: e.target.value })}
+                    style={styles.input}
+                    required
+                  />
+                  <input
+                    type="tel"
+                    placeholder="Celular *"
+                    value={registroForm.celular}
+                    onChange={(e) => setRegistroForm({ ...registroForm, celular: e.target.value })}
+                    style={styles.input}
+                    required
+                  />
+                  <input
+                    placeholder="Tu número de empleado *"
+                    value={registroForm.admin_num_empleado}
+                    onChange={(e) => setRegistroForm({ ...registroForm, admin_num_empleado: e.target.value })}
+                    style={styles.input}
+                    required
+                  />
+                  <input
+                    placeholder="Tu nombre completo *"
+                    value={registroForm.admin_nombre}
+                    onChange={(e) => setRegistroForm({ ...registroForm, admin_nombre: e.target.value })}
+                    style={styles.input}
+                    required
+                  />
+                  <input
+                    type="password"
+                    placeholder="Contraseña *"
+                    value={registroForm.admin_password}
+                    onChange={(e) => setRegistroForm({ ...registroForm, admin_password: e.target.value })}
+                    style={styles.input}
+                    required
+                  />
+                  <button type="submit" style={styles.loginButton}>Solicitar Registro</button>
+                  <p style={styles.welcomeText}>
+                    <a href="#" onClick={(e) => { e.preventDefault(); setMostrarRegistro(false); }}>
+                      ← Ya tengo cuenta, quiero iniciar sesión
+                    </a>
+                  </p>
+                </form>
+              </>
             )}
           </div>
         </div>
@@ -1496,8 +1567,8 @@ function App() {
             {mensajeUsuario && (
               <div style={{
                 ...styles.mensajeBox,
-                background: mensajeUsuario.includes('') ? '#d4edda' : '#f8d7da',
-                color: mensajeUsuario.includes('') ? '#155724' : '#721c24'
+                background: mensajeUsuario.includes('correctamente') ? accentLight : dangerLight,
+                color: mensajeUsuario.includes('correctamente') ? accentDark : danger
               }}>
                 {mensajeUsuario}
               </div>
@@ -1553,6 +1624,33 @@ function App() {
                   </ul>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Asistencias - reloj checador, cada login queda registrado */}
+        {usuario.rol === 'admin' && (
+          <div style={styles.adminSection}>
+            <h2 style={styles.sectionTitle}>Asistencias</h2>
+            <div style={styles.listCard}>
+              <div style={styles.cardHeader}>
+                <h3 style={styles.cardTitle}>Últimas checadas de entrada</h3>
+              </div>
+              {asistencias.length === 0 ? (
+                <p style={styles.emptyText}>Aún no hay checadas registradas</p>
+              ) : (
+                <ul style={styles.patientList}>
+                  {asistencias.map(a => (
+                    <li key={a.id} style={styles.userItem}>
+                      <div style={styles.userInfo}>
+                        <strong>{a.nombre}</strong>
+                        <span style={styles.userDetail}>Empleado: {a.num_empleado}</span>
+                      </div>
+                      <span style={styles.userDate}>{new Date(a.fecha_hora).toLocaleString('es-MX')}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         )}
@@ -1755,8 +1853,8 @@ function App() {
               {mensajeConsulta && (
                 <div style={{
                   ...styles.mensajeBox,
-                  background: mensajeConsulta.includes('') ? '#d4edda' : '#f8d7da',
-                  color: mensajeConsulta.includes('') ? '#155724' : '#721c24'
+                  background: mensajeConsulta.includes('correctamente') ? accentLight : dangerLight,
+                  color: mensajeConsulta.includes('correctamente') ? accentDark : danger
                 }}>
                   {mensajeConsulta}
                 </div>
@@ -2028,8 +2126,8 @@ function App() {
               {mensajeExamen && (
                 <div style={{
                   ...styles.mensajeBox,
-                  background: mensajeExamen.includes('') ? '#d4edda' : '#f8d7da',
-                  color: mensajeExamen.includes('') ? '#155724' : '#721c24'
+                  background: mensajeExamen.includes('correctamente') ? accentLight : dangerLight,
+                  color: mensajeExamen.includes('correctamente') ? accentDark : danger
                 }}>
                   {mensajeExamen}
                 </div>
@@ -2172,6 +2270,61 @@ const styles = {
     width: '100%',
     maxWidth: '400px',
     textAlign: 'center',
+  },
+  registroBox: {
+    background: '#fff',
+    padding: '48px 44px',
+    borderRadius: '4px',
+    width: '100%',
+    maxWidth: '820px',
+    textAlign: 'center',
+  },
+  videoPlaceholder: {
+    background: '#FAFAF8',
+    border: `1px dashed ${border}`,
+    borderRadius: '4px',
+    aspectRatio: '16 / 9',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: muted,
+    fontSize: '14px',
+    padding: '20px',
+    margin: '8px 0 24px',
+  },
+  pricingGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: '16px',
+    margin: '0 0 28px',
+  },
+  pricingCard: {
+    border: `1px solid ${borderLight}`,
+    borderRadius: '4px',
+    padding: '20px 16px',
+  },
+  pricingName: {
+    fontFamily: fontDisplay,
+    fontSize: '17px',
+    fontWeight: '500',
+    color: ink,
+    margin: '0 0 4px',
+  },
+  pricingDetail: {
+    fontSize: '12px',
+    color: muted,
+    margin: '0 0 12px',
+  },
+  pricingPrice: {
+    fontSize: '20px',
+    fontWeight: '600',
+    color: accent,
+    margin: '0 0 4px',
+  },
+  pricingConverted: {
+    fontSize: '11px',
+    color: mutedLight,
+    margin: 0,
   },
   title: {
     fontFamily: fontDisplay,

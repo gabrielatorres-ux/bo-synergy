@@ -50,6 +50,7 @@ function App() {
   const [nuevaEmpresaLogo, setNuevaEmpresaLogo] = useState(null);
   const [nuevaEmpresaAdmin, setNuevaEmpresaAdmin] = useState({ num_empleado: '', nombre: '', password: '' });
   const [soporteReset, setSoporteReset] = useState({ num_empleado: '', password: '' });
+  const [vistaActiva, setVistaActiva] = useState('consultas');
   const [miEmpresaNombre, setMiEmpresaNombre] = useState('');
   const [miEmpresaLogo, setMiEmpresaLogo] = useState(null);
 
@@ -1458,6 +1459,24 @@ function App() {
         <button onClick={handleLogout} style={styles.logoutButton}>Cerrar Sesión</button>
       </div>
 
+      {/* Navegación en pestañas */}
+      <div style={styles.tabBar}>
+        {[
+          { id: 'consultas', label: 'Consultas' },
+          { id: 'agenda', label: 'Mi Agenda' },
+          { id: 'indicadores', label: 'Indicadores' },
+          { id: 'configuracion', label: 'Configuración' },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setVistaActiva(tab.id)}
+            style={vistaActiva === tab.id ? styles.tabButtonActive : styles.tabButton}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {/* Contenido principal */}
       <div style={styles.content}>
         {/* Mensaje de bienvenida */}
@@ -1473,6 +1492,8 @@ function App() {
           )}
         </div>
 
+        {vistaActiva === 'consultas' && (
+        <>
         {/* Grid principal */}
         <div style={styles.mainGrid}>
           {/* Formulario de Pacientes */}
@@ -1562,7 +1583,18 @@ function App() {
             )}
           </div>
         </div>
+        </>
+        )}
 
+        {vistaActiva === 'agenda' && (
+          <div style={styles.formCard}>
+            <h2 style={styles.sectionTitle}>Mi Agenda</h2>
+            <p style={styles.emptyText}>Próximamente: calendario de actividades (reuniones, consultas, seguimientos, informes).</p>
+          </div>
+        )}
+
+        {vistaActiva === 'configuracion' && (
+        <>
         {/* Gestión de Usuarios - Solo Admin */}
         {usuario && usuario.rol === 'admin' && (
           <div style={styles.adminSection}>
@@ -1800,9 +1832,10 @@ function App() {
             </div>
           </div>
         )}
+        </>
+        )}
 
-        {/* Dashboard - Admin y Médico */}
-        {(usuario.rol === 'admin' || usuario.rol === 'medico') && (
+        {vistaActiva === 'indicadores' && (usuario.rol === 'admin' || usuario.rol === 'medico') && (
           <div style={styles.dashboardSection}>
             <div style={styles.cardHeader}>
               <h3 style={styles.cardTitle}>Dashboard de Estadísticas</h3>
@@ -2431,6 +2464,38 @@ const styles = {
     zIndex: 100,
     flexWrap: 'wrap',
     gap: '12px',
+  },
+  tabBar: {
+    display: 'flex',
+    gap: '4px',
+    padding: '0 32px',
+    background: '#fff',
+    borderBottom: `1px solid ${borderLight}`,
+    flexWrap: 'wrap',
+  },
+  tabButton: {
+    background: 'transparent',
+    border: 'none',
+    borderBottom: '2px solid transparent',
+    padding: '14px 6px',
+    margin: '0 12px',
+    fontSize: '14px',
+    fontWeight: '500',
+    color: muted,
+    cursor: 'pointer',
+    fontFamily: fontBody,
+  },
+  tabButtonActive: {
+    background: 'transparent',
+    border: 'none',
+    borderBottom: `2px solid ${accent}`,
+    padding: '14px 6px',
+    margin: '0 12px',
+    fontSize: '14px',
+    fontWeight: '500',
+    color: accent,
+    cursor: 'pointer',
+    fontFamily: fontBody,
   },
   headerLeft: {
     display: 'flex',

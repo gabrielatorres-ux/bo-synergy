@@ -742,7 +742,7 @@ function App() {
     const fecha = new Date().toLocaleDateString('es-MX');
     
     doc.setFontSize(18);
-    doc.text(`${usuario?.empresa_nombre || 'BO Synergy'}`, 105, 20, { align: 'center' });
+    doc.text(`${usuario?.empresa_nombre || 'WH Management'}`, 105, 20, { align: 'center' });
     doc.setFontSize(14);
     doc.text('CONSTANCIA DE CONSULTA', 105, 30, { align: 'center' });
     doc.line(20, 35, 190, 35);
@@ -799,7 +799,7 @@ function App() {
     
     doc.text('---', 20, yPos + 72);
     doc.setFontSize(10);
-    doc.text(`Este documento es una constancia de la consulta realizada en ${usuario?.empresa_nombre || 'BO Synergy'}.`, 20, yPos + 85);
+    doc.text(`Este documento es una constancia de la consulta realizada en ${usuario?.empresa_nombre || 'WH Management'}.`, 20, yPos + 85);
     doc.text('Atentamente,', 20, yPos + 95);
     doc.text('_________________________', 20, yPos + 105);
     doc.text('Médico Responsable', 20, yPos + 115);
@@ -812,7 +812,7 @@ function App() {
     const fecha = new Date().toLocaleDateString('es-MX');
 
     doc.setFontSize(20);
-    doc.text(`${usuario?.empresa_nombre || 'BO Synergy'}`, 105, 20, { align: 'center' });
+    doc.text(`${usuario?.empresa_nombre || 'WH Management'}`, 105, 20, { align: 'center' });
     doc.setFontSize(16);
     doc.text('R E C E T A   M É D I C A', 105, 30, { align: 'center' });
     doc.line(20, 35, 190, 35);
@@ -862,7 +862,7 @@ function App() {
     const fecha = new Date().toLocaleDateString('es-MX');
     
     doc.setFontSize(18);
-    doc.text(`${usuario?.empresa_nombre || 'BO Synergy'}`, 105, 20, { align: 'center' });
+    doc.text(`${usuario?.empresa_nombre || 'WH Management'}`, 105, 20, { align: 'center' });
     doc.setFontSize(14);
     doc.text('REPORTE DE INCAPACIDAD', 105, 30, { align: 'center' });
     doc.line(20, 35, 190, 35);
@@ -1096,7 +1096,7 @@ function App() {
       const fecha = new Date().toLocaleDateString('es-MX');
       
       doc.setFontSize(18);
-      doc.text(`${usuario?.empresa_nombre || 'BO Synergy'}`, 105, 20, { align: 'center' });
+      doc.text(`${usuario?.empresa_nombre || 'WH Management'}`, 105, 20, { align: 'center' });
       doc.setFontSize(14);
 
       if (tipo === 'constancia') {
@@ -1258,12 +1258,12 @@ function App() {
         />
         <div style={styles.loginContainer}>
           <div style={mostrarRegistro && !registroEnviado ? styles.registroBox : styles.loginBox}>
+            <h1 style={styles.title}>WH Management</h1>
             {empresaLogin?.logo_url ? (
               <img src={empresaLogin.logo_url} alt={empresaLogin.nombre} style={styles.loginLogo} />
-            ) : (
-              <h1 style={styles.title}>{empresaLogin?.nombre || 'BO Synergy'}</h1>
-            )}
-            <h2 style={styles.subtitle}>Salud Ocupacional</h2>
+            ) : empresaLogin?.nombre ? (
+              <h2 style={styles.subtitle}>{empresaLogin.nombre}</h2>
+            ) : null}
 
             {!mostrarRegistro ? (
               <>
@@ -1331,13 +1331,15 @@ function App() {
                     style={styles.input}
                     required
                   />
-                  <p style={styles.welcomeText}>Logo de tu empresa (opcional)</p>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setRegistroLogo(e.target.files[0])}
-                    style={styles.input}
-                  />
+                  <label style={styles.fileLabel}>
+                    {registroLogo ? registroLogo.name : 'Logo'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setRegistroLogo(e.target.files[0])}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
                   <input
                     type="email"
                     placeholder="Correo *"
@@ -1355,16 +1357,16 @@ function App() {
                     required
                   />
                   <input
-                    placeholder="Usuario *"
-                    value={registroForm.admin_num_empleado}
-                    onChange={(e) => setRegistroForm({ ...registroForm, admin_num_empleado: e.target.value })}
+                    placeholder="Tu nombre completo *"
+                    value={registroForm.admin_nombre}
+                    onChange={(e) => setRegistroForm({ ...registroForm, admin_nombre: e.target.value })}
                     style={styles.input}
                     required
                   />
                   <input
-                    placeholder="Tu nombre completo *"
-                    value={registroForm.admin_nombre}
-                    onChange={(e) => setRegistroForm({ ...registroForm, admin_nombre: e.target.value })}
+                    placeholder="Usuario *"
+                    value={registroForm.admin_num_empleado}
+                    onChange={(e) => setRegistroForm({ ...registroForm, admin_num_empleado: e.target.value })}
                     style={styles.input}
                     required
                   />
@@ -1442,7 +1444,7 @@ function App() {
           {usuario.empresa_logo_url ? (
             <img src={usuario.empresa_logo_url} alt={usuario.empresa_nombre} style={styles.headerLogo} />
           ) : (
-            <span style={styles.headerTitle}>{usuario.empresa_nombre || 'BO Synergy'}</span>
+            <span style={styles.headerTitle}>{usuario.empresa_nombre || 'WH Management'}</span>
           )}
           <span style={styles.headerRole}>{usuario.nombre}</span>
           <span style={{
@@ -2372,6 +2374,21 @@ const styles = {
     outline: 'none',
     backgroundColor: '#fff',
     fontFamily: fontBody,
+  },
+  fileLabel: {
+    display: 'block',
+    width: '100%',
+    padding: '12px 14px',
+    margin: '8px 0',
+    border: `1px solid ${border}`,
+    borderRadius: '4px',
+    fontSize: '15px',
+    boxSizing: 'border-box',
+    backgroundColor: '#fff',
+    fontFamily: fontBody,
+    color: muted,
+    textAlign: 'left',
+    cursor: 'pointer',
   },
   loginButton: {
     width: '100%',

@@ -755,16 +755,16 @@ app.post('/api/enviar-constancia', async (req, res) => {
     const pdfBuffer = Buffer.from(pdfBase64, 'base64');
     const nombrePDF = `Constancia_${paciente.nombre}_${consulta.fecha}.pdf`;
 
-    const asunto = `📄 Constancia de Consulta - BO Synergy`;
+    const asunto = `📄 Constancia de Consulta - WH Management`;
     const mensaje = `
       Estimado(a) ${paciente.nombre},
-      Adjunto encontrarás la constancia de tu consulta médica realizada en BO Synergy.
+      Adjunto encontrarás la constancia de tu consulta médica realizada en WH Management.
       Detalles de la consulta:
       - Fecha: ${new Date(consulta.fecha).toLocaleDateString('es-MX')}
       - Motivo: ${consulta.motivo || 'No especificado'}
       - Diagnóstico: ${consulta.impresion_diagnostica || 'Pendiente'}
       Saludos cordiales,
-      BO Synergy - Salud Ocupacional
+      WH Management - Salud Ocupacional
     `;
 
     const resultado = await enviarCorreo(destinatario, asunto, mensaje, pdfBuffer, nombrePDF);
@@ -790,16 +790,16 @@ app.post('/api/enviar-receta', async (req, res) => {
     const pdfBuffer = Buffer.from(pdfBase64, 'base64');
     const nombrePDF = `Receta_${paciente.nombre}_${consulta.fecha}.pdf`;
 
-    const asunto = `💊 Receta Médica - BO Synergy`;
+    const asunto = `💊 Receta Médica - WH Management`;
     const mensaje = `
       Estimado(a) ${paciente.nombre},
-      Adjunto encontrarás tu receta médica emitida por BO Synergy.
+      Adjunto encontrarás tu receta médica emitida por WH Management.
       Detalles de la receta:
       - Fecha: ${new Date(consulta.fecha).toLocaleDateString('es-MX')}
       - Diagnóstico: ${consulta.impresion_diagnostica || 'Pendiente'}
       - Medicamentos: ${consulta.medicamentos || 'No especificados'}
       Saludos cordiales,
-      BO Synergy - Salud Ocupacional
+      WH Management - Salud Ocupacional
     `;
 
     const resultado = await enviarCorreo(destinatario, asunto, mensaje, pdfBuffer, nombrePDF);
@@ -825,16 +825,16 @@ app.post('/api/enviar-incapacidad', async (req, res) => {
     const pdfBuffer = Buffer.from(pdfBase64, 'base64');
     const nombrePDF = `Incapacidad_${paciente.nombre}_${consulta.fecha}.pdf`;
 
-    const asunto = `🏥 Reporte de Incapacidad - BO Synergy`;
+    const asunto = `🏥 Reporte de Incapacidad - WH Management`;
     const mensaje = `
       Estimado(a) ${paciente.nombre},
-      Adjunto encontrarás el reporte de incapacidad emitido por BO Synergy.
+      Adjunto encontrarás el reporte de incapacidad emitido por WH Management.
       Detalles de la incapacidad:
       - Fecha de emisión: ${new Date(consulta.fecha).toLocaleDateString('es-MX')}
       - Motivo: ${consulta.motivo || 'No especificado'}
       - Diagnóstico: ${consulta.impresion_diagnostica || 'Pendiente'}
       Saludos cordiales,
-      BO Synergy - Salud Ocupacional
+      WH Management - Salud Ocupacional
     `;
 
     const resultado = await enviarCorreo(destinatario, asunto, mensaje, pdfBuffer, nombrePDF);
@@ -852,5 +852,5 @@ app.post('/api/enviar-incapacidad', async (req, res) => {
 // ==================== INICIAR SERVIDOR ====================
 
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor BO Synergy corriendo en http://localhost:${PORT}`);
+  console.log(`🚀 Servidor WH Management corriendo en http://localhost:${PORT}`);
 });

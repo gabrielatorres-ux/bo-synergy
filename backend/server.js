@@ -24,6 +24,17 @@ const subirLogo = async (file) => {
   return data.publicUrl;
 };
 
+const subirAdjunto = async (file) => {
+  const nombreArchivo = `${Date.now()}-${Math.random().toString(36).slice(2)}.${file.originalname.split('.').pop()}`;
+  const { error } = await supabase.storage.from('adjuntos').upload(nombreArchivo, file.buffer, {
+    contentType: file.mimetype,
+    upsert: true
+  });
+  if (error) throw error;
+  const { data } = supabase.storage.from('adjuntos').getPublicUrl(nombreArchivo);
+  return data.publicUrl;
+};
+
 const generarSlug = (texto) => texto
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .toLowerCase()
@@ -177,6 +188,22 @@ app.put('/api/empresas/:id', upload.single('logo'), async (req, res) => {
       await queryRun('UPDATE empresas SET nombre = $1 WHERE id = $2', [nombre, id]);
     }
     res.json({ message: 'Empresa actualizada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== RUTA GENÉRICA DE ADJUNTOS ====================
+// Usada por Registro de Incapacidad y Registro de Accidente para subir
+// un archivo (imagen o PDF) y guardar solo la URL pública resultante.
+
+app.post('/api/adjuntos', upload.single('archivo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se recibió ningún archivo' });
+    }
+    const url = await subirAdjunto(req.file);
+    res.json({ url });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

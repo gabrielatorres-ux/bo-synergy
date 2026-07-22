@@ -755,6 +755,58 @@ app.get('/api/accidentes', async (req, res) => {
   }
 });
 
+// ==================== RUTAS DE TRABAJOS DE ALTO RIESGO ====================
+
+app.post('/api/trabajos_alto_riesgo', async (req, res) => {
+  const { paciente_id, empresa_id, fecha, hora, tipo_riesgo, agudeza_visual, tension_arterial,
+    frecuencia_cardiaca, glucosa, prueba_equilibrio, alcoholimetria, antidoping, autorizada } = req.body;
+  try {
+    const result = await queryRun(
+      `INSERT INTO trabajos_alto_riesgo (
+        paciente_id, empresa_id, fecha, hora, tipo_riesgo, agudeza_visual, tension_arterial,
+        frecuencia_cardiaca, glucosa, prueba_equilibrio, alcoholimetria, antidoping, autorizada
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
+      [paciente_id, empresa_id, fecha, hora, tipo_riesgo, agudeza_visual, tension_arterial,
+        frecuencia_cardiaca, glucosa, prueba_equilibrio, alcoholimetria, antidoping, autorizada]
+    );
+    res.json({ id: result.rows[0]?.id, message: 'Trabajo de alto riesgo registrado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/trabajos_alto_riesgo/:pacienteId', async (req, res) => {
+  const { pacienteId } = req.params;
+  try {
+    const result = await query(
+      'SELECT * FROM trabajos_alto_riesgo WHERE paciente_id = $1 ORDER BY fecha DESC, hora DESC',
+      [pacienteId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/trabajos_alto_riesgo', async (req, res) => {
+  const { search = '', empresa_id } = req.query;
+  try {
+    const searchTerm = `%${search}%`;
+    const result = await query(
+      `SELECT t.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
+       FROM trabajos_alto_riesgo t
+       JOIN pacientes p ON p.id = t.paciente_id
+       WHERE t.empresa_id = $1
+         AND (p.nombre ILIKE $2 OR p.area ILIKE $2 OR t.fecha::text ILIKE $2)
+       ORDER BY t.fecha DESC, t.hora DESC`,
+      [empresa_id, searchTerm]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== RUTAS DE AUTENTICACIÓN ====================
 
 app.post('/api/login', async (req, res) => {

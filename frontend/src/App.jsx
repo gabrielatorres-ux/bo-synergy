@@ -44,6 +44,19 @@ const ETIQUETAS_RESULTADO_PRUEBA = {
   no_realizada: 'No realizada'
 };
 
+const ETIQUETAS_TIPO_RIESGO = {
+  espacios_confinados: 'Espacios confinados',
+  trabajos_alturas: 'Trabajos en alturas',
+  descenso_alto_riesgo: 'Descenso de alto riesgo',
+  corte_soldadura: 'Corte y soldadura',
+  otros: 'Otros'
+};
+
+const ETIQUETAS_PRUEBA_EQUILIBRIO = {
+  normal: 'Normal',
+  anormal: 'Anormal'
+};
+
 function App() {
   const [usuario, setUsuario] = useState(null);
   const [numEmpleado, setNumEmpleado] = useState('');
@@ -190,6 +203,23 @@ function App() {
   const [accidenteBusqueda, setAccidenteBusqueda] = useState('');
   const [accidenteLog, setAccidenteLog] = useState([]);
   const [guardandoAccidente, setGuardandoAccidente] = useState(false);
+
+  const [altoRiesgoPaciente, setAltoRiesgoPaciente] = useState(null);
+  const [altoRiesgoForm, setAltoRiesgoForm] = useState({
+    fecha: new Date().toISOString().split('T')[0],
+    hora: new Date().toTimeString().slice(0, 5),
+    tipo_riesgo: 'espacios_confinados',
+    agudeza_visual: '',
+    tension_arterial: '',
+    frecuencia_cardiaca: '',
+    glucosa: '',
+    prueba_equilibrio: 'normal',
+    alcoholimetria: 'no_realizada',
+    antidoping: 'no_realizada',
+    autorizada: 'si'
+  });
+  const [altoRiesgoBusqueda, setAltoRiesgoBusqueda] = useState('');
+  const [altoRiesgoLog, setAltoRiesgoLog] = useState([]);
 
   const API_URL = 'https://bo-synergy-backend.onrender.com/api';
 
@@ -1274,6 +1304,98 @@ function App() {
     toast.success(`${accidenteLog.length} registros exportados correctamente`);
   };
 
+  // ===== TRABAJO DE ALTO RIESGO =====
+  const cargarAltoRiesgoLog = async () => {
+    try {
+      const response = await api.get(`${API_URL}/trabajos_alto_riesgo`, { params: { search: altoRiesgoBusqueda } });
+      setAltoRiesgoLog(response.data);
+    } catch (error) {
+      console.error('Error al cargar trabajos de alto riesgo:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (subVistaConsultas === 'alto_riesgo' && usuario) {
+      cargarAltoRiesgoLog();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subVistaConsultas, altoRiesgoBusqueda, usuario]);
+
+  const handleChangeAltoRiesgo = (e) => {
+    setAltoRiesgoForm({ ...altoRiesgoForm, [e.target.name]: e.target.value });
+  };
+
+  const handleGuardarAltoRiesgo = async (e) => {
+    e.preventDefault();
+    if (!altoRiesgoPaciente) {
+      toast.error('Selecciona un paciente');
+      return;
+    }
+    try {
+      await api.post(`${API_URL}/trabajos_alto_riesgo`, {
+        paciente_id: altoRiesgoPaciente.id,
+        fecha: altoRiesgoForm.fecha,
+        hora: altoRiesgoForm.hora,
+        tipo_riesgo: altoRiesgoForm.tipo_riesgo,
+        agudeza_visual: altoRiesgoForm.agudeza_visual,
+        tension_arterial: altoRiesgoForm.tension_arterial,
+        frecuencia_cardiaca: altoRiesgoForm.frecuencia_cardiaca,
+        glucosa: altoRiesgoForm.glucosa,
+        prueba_equilibrio: altoRiesgoForm.prueba_equilibrio,
+        alcoholimetria: altoRiesgoForm.alcoholimetria,
+        antidoping: altoRiesgoForm.antidoping,
+        autorizada: altoRiesgoForm.autorizada === 'si'
+      });
+      toast.success('Trabajo de alto riesgo registrado correctamente');
+      setAltoRiesgoPaciente(null);
+      setAltoRiesgoForm({
+        fecha: new Date().toISOString().split('T')[0],
+        hora: new Date().toTimeString().slice(0, 5),
+        tipo_riesgo: 'espacios_confinados',
+        agudeza_visual: '',
+        tension_arterial: '',
+        frecuencia_cardiaca: '',
+        glucosa: '',
+        prueba_equilibrio: 'normal',
+        alcoholimetria: 'no_realizada',
+        antidoping: 'no_realizada',
+        autorizada: 'si'
+      });
+      cargarAltoRiesgoLog();
+    } catch (error) {
+      toast.error('Error al registrar el trabajo de alto riesgo');
+      console.error(error);
+    }
+  };
+
+  const exportarAltoRiesgoExcel = () => {
+    if (altoRiesgoLog.length === 0) {
+      toast.error('No hay registros de alto riesgo para exportar');
+      return;
+    }
+    const datos = altoRiesgoLog.map(t => ({
+      'Fecha': t.fecha ? new Date(t.fecha).toLocaleDateString('es-MX') : '',
+      'Hora': t.hora || '',
+      'Nombre': t.paciente_nombre,
+      'Área': t.paciente_area || '',
+      'Puesto': t.paciente_puesto || '',
+      'Tipo de riesgo': ETIQUETAS_TIPO_RIESGO[t.tipo_riesgo] || t.tipo_riesgo,
+      'Agudeza visual': t.agudeza_visual || '',
+      'Tensión arterial': t.tension_arterial || '',
+      'Frecuencia cardiaca': t.frecuencia_cardiaca || '',
+      'Glucosa': t.glucosa || '',
+      'Prueba de equilibrio': ETIQUETAS_PRUEBA_EQUILIBRIO[t.prueba_equilibrio] || t.prueba_equilibrio,
+      'Alcoholimetría': ETIQUETAS_RESULTADO_PRUEBA[t.alcoholimetria] || t.alcoholimetria,
+      'Antidoping': ETIQUETAS_RESULTADO_PRUEBA[t.antidoping] || t.antidoping,
+      'Autorizada': t.autorizada ? 'Sí' : 'No'
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(datos);
+    XLSX.utils.book_append_sheet(wb, ws, 'Alto Riesgo');
+    XLSX.writeFile(wb, `TrabajoAltoRiesgo_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success(`${altoRiesgoLog.length} registros exportados correctamente`);
+  };
+
   // ===== FUNCIONES DE PDFs =====
   const generarConstanciaPDF = (consulta, paciente) => {
     const doc = new jsPDF();
@@ -2039,6 +2161,7 @@ function App() {
             { id: 'seguimiento', label: 'Seguimiento' },
             { id: 'restricciones', label: 'Restricciones' },
             { id: 'accidentes', label: 'Accidentes' },
+            { id: 'alto_riesgo', label: 'Alto Riesgo' },
           ].map(item => (
             <button
               key={item.id}
@@ -2517,6 +2640,103 @@ function App() {
                       {a.adjunto_url && (
                         <> · <a href={a.adjunto_url} target="_blank" rel="noreferrer">Adjunto</a></>
                       )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        )}
+
+        {subVistaConsultas === 'alto_riesgo' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Nuevo trabajo de alto riesgo</h3>
+            </div>
+            <form onSubmit={handleGuardarAltoRiesgo} style={styles.cardForm}>
+              <BuscadorPaciente
+                apiUrl={API_URL}
+                empresaId={usuario?.empresa_id}
+                pacienteSeleccionado={altoRiesgoPaciente}
+                onSeleccionar={setAltoRiesgoPaciente}
+              />
+              <input type="date" name="fecha" value={altoRiesgoForm.fecha} onChange={handleChangeAltoRiesgo} style={styles.cardInput} required />
+              <input type="time" name="hora" value={altoRiesgoForm.hora} onChange={handleChangeAltoRiesgo} style={styles.cardInput} required />
+              <label style={styles.inlineLabel}>
+                Tipo de riesgo
+                <select name="tipo_riesgo" value={altoRiesgoForm.tipo_riesgo} onChange={handleChangeAltoRiesgo} style={styles.cardInput}>
+                  {Object.entries(ETIQUETAS_TIPO_RIESGO).map(([valor, etiqueta]) => (
+                    <option key={valor} value={valor}>{etiqueta}</option>
+                  ))}
+                </select>
+              </label>
+              <input name="agudeza_visual" placeholder="Agudeza visual" value={altoRiesgoForm.agudeza_visual} onChange={handleChangeAltoRiesgo} style={styles.cardInput} />
+              <input name="tension_arterial" placeholder="Tensión arterial (mmHg)" value={altoRiesgoForm.tension_arterial} onChange={handleChangeAltoRiesgo} style={styles.cardInput} />
+              <input name="frecuencia_cardiaca" placeholder="Frecuencia cardiaca (lpm)" value={altoRiesgoForm.frecuencia_cardiaca} onChange={handleChangeAltoRiesgo} style={styles.cardInput} />
+              <input name="glucosa" placeholder="Glucosa (mg/dL)" value={altoRiesgoForm.glucosa} onChange={handleChangeAltoRiesgo} style={styles.cardInput} />
+              <label style={styles.inlineLabel}>
+                Prueba de equilibrio
+                <select name="prueba_equilibrio" value={altoRiesgoForm.prueba_equilibrio} onChange={handleChangeAltoRiesgo} style={styles.cardInput}>
+                  {Object.entries(ETIQUETAS_PRUEBA_EQUILIBRIO).map(([valor, etiqueta]) => (
+                    <option key={valor} value={valor}>{etiqueta}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={styles.inlineLabel}>
+                Alcoholimetría
+                <select name="alcoholimetria" value={altoRiesgoForm.alcoholimetria} onChange={handleChangeAltoRiesgo} style={styles.cardInput}>
+                  {Object.entries(ETIQUETAS_RESULTADO_PRUEBA).map(([valor, etiqueta]) => (
+                    <option key={valor} value={valor}>{etiqueta}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={styles.inlineLabel}>
+                Antidoping
+                <select name="antidoping" value={altoRiesgoForm.antidoping} onChange={handleChangeAltoRiesgo} style={styles.cardInput}>
+                  {Object.entries(ETIQUETAS_RESULTADO_PRUEBA).map(([valor, etiqueta]) => (
+                    <option key={valor} value={valor}>{etiqueta}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={styles.inlineLabel}>
+                Autorizada
+                <select name="autorizada" value={altoRiesgoForm.autorizada} onChange={handleChangeAltoRiesgo} style={styles.cardInput}>
+                  <option value="si">Sí</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
+              <button type="submit" style={styles.saveButton}>Guardar registro</button>
+            </form>
+          </div>
+
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Log de alto riesgo</h3>
+              <button onClick={exportarAltoRiesgoExcel} style={styles.exportButton}>
+                Exportar Excel
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="Buscar por fecha, nombre o área..."
+              value={altoRiesgoBusqueda}
+              onChange={(e) => setAltoRiesgoBusqueda(e.target.value)}
+              style={styles.cardInput}
+            />
+            {altoRiesgoLog.length === 0 ? (
+              <p style={styles.emptyText}>No hay registros de alto riesgo aún</p>
+            ) : (
+              <ul style={styles.patientList}>
+                {altoRiesgoLog.map(t => (
+                  <li key={t.id} style={styles.patientItem}>
+                    <strong>{t.paciente_nombre}</strong>
+                    <span style={styles.patientInfo}>
+                      {new Date(t.fecha).toLocaleDateString('es-MX')} {t.hora || ''} · Área: {t.paciente_area || '—'}
+                      {' · '}{ETIQUETAS_TIPO_RIESGO[t.tipo_riesgo] || t.tipo_riesgo}
+                      {' · Equilibrio: '}{ETIQUETAS_PRUEBA_EQUILIBRIO[t.prueba_equilibrio] || t.prueba_equilibrio}
+                      {' · '}{t.autorizada ? 'Autorizada' : 'No autorizada'}
                     </span>
                   </li>
                 ))}

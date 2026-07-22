@@ -90,6 +90,7 @@ function App() {
   const [mensajeExamen, setMensajeExamen] = useState('');
 
   const [subVistaConsultas, setSubVistaConsultas] = useState('pacientes');
+  const [menuConsultaDiariaId, setMenuConsultaDiariaId] = useState(null);
 
   const [bitacoraPaciente, setBitacoraPaciente] = useState(null);
   const [bitacoraForm, setBitacoraForm] = useState({
@@ -153,6 +154,17 @@ function App() {
     });
     return () => api.interceptors.request.eject(interceptorId);
   }, [usuario]);
+
+  // Cierra el menú desplegable de "Consulta Diaria" al hacer clic fuera de él.
+  useEffect(() => {
+    const cerrarMenuAlClicFuera = (e) => {
+      if (!e.target.closest('[data-consulta-diaria-menu]')) {
+        setMenuConsultaDiariaId(null);
+      }
+    };
+    document.addEventListener('mousedown', cerrarMenuAlClicFuera);
+    return () => document.removeEventListener('mousedown', cerrarMenuAlClicFuera);
+  }, []);
 
   // Carga los datos iniciales una vez que el interceptor de arriba ya
   // conoce el empresa_id del usuario logueado (por eso va en un efecto
@@ -650,6 +662,8 @@ function App() {
       case 'emi':
         formFields = {
           ...baseForm,
+          alergia: 'no',
+          embarazada: 'no',
           exposicion_riesgos: '',
           trabajos_previos: '',
           riesgos_laborales: '',
@@ -665,6 +679,8 @@ function App() {
       case 'emp':
         formFields = {
           ...baseForm,
+          alergia: 'no',
+          embarazada: 'no',
           exposicion_auditiva: '',
           exposicion_respiratoria: '',
           exposicion_movimientos_repetitivos: '',
@@ -680,6 +696,8 @@ function App() {
       case 'emr':
         formFields = {
           ...baseForm,
+          alergia: 'no',
+          embarazada: 'no',
           secuelas_auditiva: '',
           secuelas_respiratoria: '',
           secuelas_motriz: '',
@@ -735,8 +753,11 @@ function App() {
   const handleGuardarExamen = async (e) => {
     e.preventDefault();
     try {
+      const datosExamen = { ...examenForm };
+      if ('alergia' in datosExamen) datosExamen.alergia = datosExamen.alergia === 'si';
+      if ('embarazada' in datosExamen) datosExamen.embarazada = datosExamen.embarazada === 'si';
       await api.post(`${API_URL}/${tipoExamen}`, {
-        ...examenForm,
+        ...datosExamen,
         paciente_id: pacienteSeleccionado.id
       });
       setMensajeExamen(`${tipoExamen.toUpperCase()} registrado correctamente`);
@@ -748,7 +769,8 @@ function App() {
         cie10: '',
         exploracion_fisica: '',
         signos_vitales: '',
-        agudeza_visual: ''
+        agudeza_visual: '',
+        ...('alergia' in examenForm ? { alergia: 'no', embarazada: 'no' } : {})
       });
     } catch (error) {
       setMensajeExamen(`Error al registrar ${tipoExamen.toUpperCase()}`);
@@ -1662,14 +1684,24 @@ function App() {
                         </span>
                       </div>
                       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                        <button onClick={() => handleAbrirConsulta(p)} style={styles.consultaButton}>Consulta</button>
+                        <button onClick={() => handleAbrirConsulta(p)} style={styles.consultaButton}>Consulta General</button>
                         {(usuario.rol === 'admin' || usuario.rol === 'medico') && (
-                          <>
-                            <button onClick={() => handleAbrirExamen('emi', p)} style={styles.emiButton}>EMI</button>
-                            <button onClick={() => handleAbrirExamen('emp', p)} style={styles.empButton}>EMP</button>
-                            <button onClick={() => handleAbrirExamen('emr', p)} style={styles.emrButton}>EMR</button>
-                            <button onClick={() => handleAbrirExamen('vulnerabilidad', p)} style={styles.vulnerabilidadButton}>Vuln</button>
-                          </>
+                          <div style={{ position: 'relative' }} data-consulta-diaria-menu>
+                            <button
+                              onClick={() => setMenuConsultaDiariaId(menuConsultaDiariaId === p.id ? null : p.id)}
+                              style={styles.consultaDiariaButton}
+                            >
+                              Consulta Diaria ▾
+                            </button>
+                            {menuConsultaDiariaId === p.id && (
+                              <div style={styles.dropdownMenu}>
+                                <button onClick={() => { handleAbrirExamen('emi', p); setMenuConsultaDiariaId(null); }} style={{ ...styles.emiButton, ...styles.dropdownItem }}>EMI</button>
+                                <button onClick={() => { handleAbrirExamen('emp', p); setMenuConsultaDiariaId(null); }} style={{ ...styles.empButton, ...styles.dropdownItem }}>EMP</button>
+                                <button onClick={() => { handleAbrirExamen('emr', p); setMenuConsultaDiariaId(null); }} style={{ ...styles.emrButton, ...styles.dropdownItem }}>EMR</button>
+                                <button onClick={() => { handleAbrirExamen('vulnerabilidad', p); setMenuConsultaDiariaId(null); }} style={{ ...styles.vulnerabilidadButton, ...styles.dropdownItem }}>Vulnerables y Embarazadas</button>
+                              </div>
+                            )}
+                          </div>
                         )}
                         <button onClick={() => handleEditarPaciente(p)} style={styles.editButton}>Editar</button>
                         <button onClick={() => handleEliminarPaciente(p.id, p.nombre)} style={styles.deleteButton}>Eliminar</button>
@@ -2074,7 +2106,7 @@ function App() {
             <div style={styles.modalContent}>
               <div style={styles.modalHeader}>
                 <div>
-                  <h2>Consulta Diaria</h2>
+                  <h2>Consulta General</h2>
                   <h3>Paciente: {pacienteSeleccionado.nombre}</h3>
                 </div>
                 <button onClick={handleCerrarConsulta} style={styles.closeButton}>✕</button>
@@ -2347,8 +2379,13 @@ function App() {
             <div style={styles.modalContent}>
               <div style={styles.modalHeader}>
                 <div>
-                  <h2>{tipoExamen.toUpperCase()} - Examen Especial</h2>
+                  <h2>Consulta Diaria — {tipoExamen.toUpperCase()}</h2>
                   <h3>Paciente: {pacienteSeleccionado.nombre}</h3>
+                  {examenesPaciente.length > 0 && (
+                    <p style={styles.emptyText}>
+                      Último registro: {new Date(examenesPaciente[0].fecha).toLocaleDateString('es-MX')}
+                    </p>
+                  )}
                 </div>
                 <button onClick={handleCerrarExamen} style={styles.closeButton}>✕</button>
               </div>
@@ -2368,6 +2405,25 @@ function App() {
                   <label>Fecha</label>
                   <input type="date" name="fecha" value={examenForm.fecha || ''} onChange={handleChangeExamen} style={styles.cardInput} required />
                 </div>
+
+                {'alergia' in examenForm && (
+                  <div style={styles.formRow}>
+                    <div style={styles.formGroup}>
+                      <label>Alergia</label>
+                      <select name="alergia" value={examenForm.alergia || 'no'} onChange={handleChangeExamen} style={styles.cardInput}>
+                        <option value="no">No</option>
+                        <option value="si">Sí</option>
+                      </select>
+                    </div>
+                    <div style={styles.formGroup}>
+                      <label>Embarazada</label>
+                      <select name="embarazada" value={examenForm.embarazada || 'no'} onChange={handleChangeExamen} style={styles.cardInput}>
+                        <option value="no">No</option>
+                        <option value="si">Sí</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
 
                 {/* Campos específicos - resumidos para no alargar */}
                 <div style={styles.formDivider}>--- Diagnóstico y Exploración ---</div>
@@ -2993,6 +3049,33 @@ const styles = {
     ...pastelButton(pastelYellow.bg, pastelYellow.text),
     padding: '6px 10px',
     fontSize: '11px',
+  },
+  consultaDiariaButton: {
+    ...pastelButton(pastelBlue.bg, pastelBlue.text),
+    padding: '6px 12px',
+    fontSize: '13px',
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    zIndex: 20,
+    top: '100%',
+    right: 0,
+    marginTop: '4px',
+    background: '#fff',
+    border: `1px solid ${border}`,
+    borderRadius: '4px',
+    boxShadow: '0 4px 14px rgba(0,0,0,0.12)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    padding: '6px',
+    minWidth: '180px',
+  },
+  dropdownItem: {
+    display: 'block',
+    width: '100%',
+    textAlign: 'left',
+    fontSize: '13px',
   },
   dashboardSection: {
     marginTop: '40px',

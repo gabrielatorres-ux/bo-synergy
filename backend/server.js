@@ -364,11 +364,11 @@ app.delete('/api/consultas/:id', async (req, res) => {
 // ==================== RUTAS DE EXÁMENES ====================
 
 app.post('/api/emi', async (req, res) => {
-  const { paciente_id, fecha, exposicion_riesgos, trabajos_previos, riesgos_laborales, 
-    accidentes_previos, enfermedades_laborales, antecedentes_familiares, 
-    antecedentes_personales_no_patologicos, antecedentes_personales_patologicos, 
-    interrogatorio_aparatos, impresion_diagnostica, constancia_aptitud, cie10, 
-    exploracion_fisica, signos_vitales, agudeza_visual } = req.body;
+  const { paciente_id, fecha, exposicion_riesgos, trabajos_previos, riesgos_laborales,
+    accidentes_previos, enfermedades_laborales, antecedentes_familiares,
+    antecedentes_personales_no_patologicos, antecedentes_personales_patologicos,
+    interrogatorio_aparatos, impresion_diagnostica, constancia_aptitud, cie10,
+    exploracion_fisica, signos_vitales, agudeza_visual, alergia, embarazada } = req.body;
 
   try {
     const result = await queryRun(
@@ -377,13 +377,13 @@ app.post('/api/emi', async (req, res) => {
         accidentes_previos, enfermedades_laborales, antecedentes_familiares,
         antecedentes_personales_no_patologicos, antecedentes_personales_patologicos,
         interrogatorio_aparatos, impresion_diagnostica, constancia_aptitud, cie10,
-        exploracion_fisica, signos_vitales, agudeza_visual
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
+        exploracion_fisica, signos_vitales, agudeza_visual, alergia, embarazada
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) RETURNING id`,
       [paciente_id, fecha, exposicion_riesgos, trabajos_previos, riesgos_laborales,
         accidentes_previos, enfermedades_laborales, antecedentes_familiares,
         antecedentes_personales_no_patologicos, antecedentes_personales_patologicos,
         interrogatorio_aparatos, impresion_diagnostica, constancia_aptitud, cie10,
-        exploracion_fisica, signos_vitales, agudeza_visual]
+        exploracion_fisica, signos_vitales, agudeza_visual, alergia, embarazada]
     );
     res.json({ id: result.rows[0]?.id, message: 'EMI registrado correctamente' });
   } catch (error) {
@@ -406,7 +406,7 @@ app.post('/api/emp', async (req, res) => {
     exposicion_movimientos_repetitivos, exposicion_postural, exposicion_cargas_manuales,
     exposicion_visual, exposicion_psicosocial, exposicion_trabajos_alto_riesgo,
     interrogatorio_aparatos, impresion_diagnostica, solicitud_reubicacion, cie10,
-    exploracion_fisica, signos_vitales, agudeza_visual } = req.body;
+    exploracion_fisica, signos_vitales, agudeza_visual, alergia, embarazada } = req.body;
 
   try {
     const result = await queryRun(
@@ -415,13 +415,13 @@ app.post('/api/emp', async (req, res) => {
         exposicion_movimientos_repetitivos, exposicion_postural, exposicion_cargas_manuales,
         exposicion_visual, exposicion_psicosocial, exposicion_trabajos_alto_riesgo,
         interrogatorio_aparatos, impresion_diagnostica, solicitud_reubicacion, cie10,
-        exploracion_fisica, signos_vitales, agudeza_visual
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
+        exploracion_fisica, signos_vitales, agudeza_visual, alergia, embarazada
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) RETURNING id`,
       [paciente_id, fecha, exposicion_auditiva, exposicion_respiratoria,
         exposicion_movimientos_repetitivos, exposicion_postural, exposicion_cargas_manuales,
         exposicion_visual, exposicion_psicosocial, exposicion_trabajos_alto_riesgo,
         interrogatorio_aparatos, impresion_diagnostica, solicitud_reubicacion, cie10,
-        exploracion_fisica, signos_vitales, agudeza_visual]
+        exploracion_fisica, signos_vitales, agudeza_visual, alergia, embarazada]
     );
     res.json({ id: result.rows[0]?.id, message: 'EMP registrado correctamente' });
   } catch (error) {
@@ -443,7 +443,8 @@ app.post('/api/emr', async (req, res) => {
   const { paciente_id, fecha, secuelas_auditiva, secuelas_respiratoria, secuelas_motriz,
     secuelas_pensamiento, secuelas_fuerza, secuelas_neurologica, secuelas_psicosocial,
     secuelas_visual, interrogatorio_aparatos, impresion_diagnostica,
-    recomendaciones_reingreso, cie10, exploracion_fisica, signos_vitales, agudeza_visual } = req.body;
+    recomendaciones_reingreso, cie10, exploracion_fisica, signos_vitales, agudeza_visual,
+    alergia, embarazada } = req.body;
 
   try {
     const result = await queryRun(
@@ -451,12 +452,14 @@ app.post('/api/emr', async (req, res) => {
         paciente_id, fecha, secuelas_auditiva, secuelas_respiratoria, secuelas_motriz,
         secuelas_pensamiento, secuelas_fuerza, secuelas_neurologica, secuelas_psicosocial,
         secuelas_visual, interrogatorio_aparatos, impresion_diagnostica,
-        recomendaciones_reingreso, cie10, exploracion_fisica, signos_vitales, agudeza_visual
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
+        recomendaciones_reingreso, cie10, exploracion_fisica, signos_vitales, agudeza_visual,
+        alergia, embarazada
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) RETURNING id`,
       [paciente_id, fecha, secuelas_auditiva, secuelas_respiratoria, secuelas_motriz,
         secuelas_pensamiento, secuelas_fuerza, secuelas_neurologica, secuelas_psicosocial,
         secuelas_visual, interrogatorio_aparatos, impresion_diagnostica,
-        recomendaciones_reingreso, cie10, exploracion_fisica, signos_vitales, agudeza_visual]
+        recomendaciones_reingreso, cie10, exploracion_fisica, signos_vitales, agudeza_visual,
+        alergia, embarazada]
     );
     res.json({ id: result.rows[0]?.id, message: 'EMR registrado correctamente' });
   } catch (error) {

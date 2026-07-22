@@ -655,6 +655,54 @@ app.get('/api/seguimientos', async (req, res) => {
   }
 });
 
+// ==================== RUTAS DE RESTRICCIONES ====================
+
+app.post('/api/restricciones', async (req, res) => {
+  const { paciente_id, empresa_id, fecha, hora, tipo, dias, descripcion } = req.body;
+  try {
+    const result = await queryRun(
+      `INSERT INTO restricciones (paciente_id, empresa_id, fecha, hora, tipo, dias, descripcion)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+      [paciente_id, empresa_id, fecha, hora, tipo, dias, descripcion]
+    );
+    res.json({ id: result.rows[0]?.id, message: 'Restricción registrada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/restricciones/:pacienteId', async (req, res) => {
+  const { pacienteId } = req.params;
+  try {
+    const result = await query(
+      'SELECT * FROM restricciones WHERE paciente_id = $1 ORDER BY fecha DESC, hora DESC',
+      [pacienteId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/restricciones', async (req, res) => {
+  const { search = '', empresa_id } = req.query;
+  try {
+    const searchTerm = `%${search}%`;
+    const result = await query(
+      `SELECT r.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
+       FROM restricciones r
+       JOIN pacientes p ON p.id = r.paciente_id
+       WHERE r.empresa_id = $1
+         AND (p.nombre ILIKE $2 OR p.area ILIKE $2 OR r.fecha::text ILIKE $2)
+       ORDER BY r.fecha DESC, r.hora DESC`,
+      [empresa_id, searchTerm]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== RUTAS DE AUTENTICACIÓN ====================
 
 app.post('/api/login', async (req, res) => {

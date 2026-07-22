@@ -33,6 +33,11 @@ const ETIQUETAS_TIPO_SEGUIMIENTO = {
   otros: 'Otros'
 };
 
+const ETIQUETAS_TIPO_RESTRICCION = {
+  temporal: 'Temporal',
+  permanente: 'Permanente'
+};
+
 function App() {
   const [usuario, setUsuario] = useState(null);
   const [numEmpleado, setNumEmpleado] = useState('');
@@ -152,6 +157,17 @@ function App() {
   });
   const [seguimientoBusqueda, setSeguimientoBusqueda] = useState('');
   const [seguimientoLog, setSeguimientoLog] = useState([]);
+
+  const [restriccionPaciente, setRestriccionPaciente] = useState(null);
+  const [restriccionForm, setRestriccionForm] = useState({
+    fecha: new Date().toISOString().split('T')[0],
+    hora: new Date().toTimeString().slice(0, 5),
+    tipo: 'temporal',
+    dias: '',
+    descripcion: ''
+  });
+  const [restriccionBusqueda, setRestriccionBusqueda] = useState('');
+  const [restriccionLog, setRestriccionLog] = useState([]);
 
   const API_URL = 'https://bo-synergy-backend.onrender.com/api';
 
@@ -1066,6 +1082,80 @@ function App() {
     toast.success(`${seguimientoLog.length} registros exportados correctamente`);
   };
 
+  // ===== REPORTE DE RESTRICCIONES =====
+  const cargarRestriccionLog = async () => {
+    try {
+      const response = await api.get(`${API_URL}/restricciones`, { params: { search: restriccionBusqueda } });
+      setRestriccionLog(response.data);
+    } catch (error) {
+      console.error('Error al cargar restricciones:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (subVistaConsultas === 'restricciones' && usuario) {
+      cargarRestriccionLog();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subVistaConsultas, restriccionBusqueda, usuario]);
+
+  const handleChangeRestriccion = (e) => {
+    setRestriccionForm({ ...restriccionForm, [e.target.name]: e.target.value });
+  };
+
+  const handleGuardarRestriccion = async (e) => {
+    e.preventDefault();
+    if (!restriccionPaciente) {
+      toast.error('Selecciona un paciente');
+      return;
+    }
+    try {
+      await api.post(`${API_URL}/restricciones`, {
+        paciente_id: restriccionPaciente.id,
+        fecha: restriccionForm.fecha,
+        hora: restriccionForm.hora,
+        tipo: restriccionForm.tipo,
+        dias: restriccionForm.dias || null,
+        descripcion: restriccionForm.descripcion
+      });
+      toast.success('Restricción registrada correctamente');
+      setRestriccionPaciente(null);
+      setRestriccionForm({
+        fecha: new Date().toISOString().split('T')[0],
+        hora: new Date().toTimeString().slice(0, 5),
+        tipo: 'temporal',
+        dias: '',
+        descripcion: ''
+      });
+      cargarRestriccionLog();
+    } catch (error) {
+      toast.error('Error al registrar la restricción');
+      console.error(error);
+    }
+  };
+
+  const exportarRestriccionExcel = () => {
+    if (restriccionLog.length === 0) {
+      toast.error('No hay restricciones para exportar');
+      return;
+    }
+    const datos = restriccionLog.map(r => ({
+      'Fecha': r.fecha ? new Date(r.fecha).toLocaleDateString('es-MX') : '',
+      'Hora': r.hora || '',
+      'Nombre': r.paciente_nombre,
+      'Área': r.paciente_area || '',
+      'Puesto': r.paciente_puesto || '',
+      'Tipo': ETIQUETAS_TIPO_RESTRICCION[r.tipo] || r.tipo,
+      'Días': r.dias || '',
+      'Descripción': r.descripcion || ''
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(datos);
+    XLSX.utils.book_append_sheet(wb, ws, 'Restricciones');
+    XLSX.writeFile(wb, `Restricciones_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success(`${restriccionLog.length} registros exportados correctamente`);
+  };
+
   // ===== FUNCIONES DE PDFs =====
   const generarConstanciaPDF = (consulta, paciente) => {
     const doc = new jsPDF();
@@ -1829,6 +1919,7 @@ function App() {
             { id: 'bitacora', label: 'Bitácora' },
             { id: 'incapacidad', label: 'Incapacidades' },
             { id: 'seguimiento', label: 'Seguimiento' },
+            { id: 'restricciones', label: 'Restricciones' },
           ].map(item => (
             <button
               key={item.id}
@@ -2160,6 +2251,70 @@ function App() {
                       {new Date(s.fecha).toLocaleDateString('es-MX')} {s.hora || ''} · Área: {s.paciente_area || '—'}
                       {' · '}{ETIQUETAS_TIPO_SEGUIMIENTO[s.tipo] || s.tipo}
                       {s.observacion ? ` · ${s.observacion}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        )}
+
+        {subVistaConsultas === 'restricciones' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Nuevo reporte de restricciones</h3>
+            </div>
+            <form onSubmit={handleGuardarRestriccion} style={styles.cardForm}>
+              <BuscadorPaciente
+                apiUrl={API_URL}
+                empresaId={usuario?.empresa_id}
+                pacienteSeleccionado={restriccionPaciente}
+                onSeleccionar={setRestriccionPaciente}
+              />
+              <input type="date" name="fecha" value={restriccionForm.fecha} onChange={handleChangeRestriccion} style={styles.cardInput} required />
+              <input type="time" name="hora" value={restriccionForm.hora} onChange={handleChangeRestriccion} style={styles.cardInput} required />
+              <label style={styles.inlineLabel}>
+                Tipo de restricción
+                <select name="tipo" value={restriccionForm.tipo} onChange={handleChangeRestriccion} style={styles.cardInput}>
+                  {Object.entries(ETIQUETAS_TIPO_RESTRICCION).map(([valor, etiqueta]) => (
+                    <option key={valor} value={valor}>{etiqueta}</option>
+                  ))}
+                </select>
+              </label>
+              <input type="number" min="0" name="dias" placeholder="Número de días" value={restriccionForm.dias} onChange={handleChangeRestriccion} style={styles.cardInput} />
+              <textarea name="descripcion" placeholder="Describa el tipo de restricción" value={restriccionForm.descripcion} onChange={handleChangeRestriccion} rows="3" style={styles.cardInput} />
+              <button type="submit" style={styles.saveButton}>Guardar reporte</button>
+            </form>
+          </div>
+
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Log de restricciones</h3>
+              <button onClick={exportarRestriccionExcel} style={styles.exportButton}>
+                Exportar Excel
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="Buscar por fecha, nombre o área..."
+              value={restriccionBusqueda}
+              onChange={(e) => setRestriccionBusqueda(e.target.value)}
+              style={styles.cardInput}
+            />
+            {restriccionLog.length === 0 ? (
+              <p style={styles.emptyText}>No hay restricciones registradas aún</p>
+            ) : (
+              <ul style={styles.patientList}>
+                {restriccionLog.map(r => (
+                  <li key={r.id} style={styles.patientItem}>
+                    <strong>{r.paciente_nombre}</strong>
+                    <span style={styles.patientInfo}>
+                      {new Date(r.fecha).toLocaleDateString('es-MX')} {r.hora || ''} · Área: {r.paciente_area || '—'}
+                      {' · '}{ETIQUETAS_TIPO_RESTRICCION[r.tipo] || r.tipo}
+                      {r.dias ? ` · ${r.dias} días` : ''}
+                      {r.descripcion ? ` · ${r.descripcion}` : ''}
                     </span>
                   </li>
                 ))}

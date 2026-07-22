@@ -3,6 +3,8 @@ import axios from 'axios';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Dashboard from './components/Dashboard';
+import BuscadorPaciente from './components/BuscadorPaciente';
+import SelectorCIE10 from './components/SelectorCIE10';
 import * as XLSX from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
 import './App.css';
@@ -86,6 +88,23 @@ function App() {
   const [examenForm, setExamenForm] = useState({});
   const [examenesPaciente, setExamenesPaciente] = useState([]);
   const [mensajeExamen, setMensajeExamen] = useState('');
+
+  const [subVistaConsultas, setSubVistaConsultas] = useState('pacientes');
+
+  const [bitacoraPaciente, setBitacoraPaciente] = useState(null);
+  const [bitacoraForm, setBitacoraForm] = useState({
+    fecha: new Date().toISOString().split('T')[0],
+    hora: new Date().toTimeString().slice(0, 5),
+    alergias: 'no',
+    embarazo: 'no',
+    cie10: '',
+    cie10Otro: '',
+    tratamiento: '',
+    firma: ''
+  });
+  const [mensajeBitacora, setMensajeBitacora] = useState('');
+  const [bitacoraBusqueda, setBitacoraBusqueda] = useState('');
+  const [bitacoraLog, setBitacoraLog] = useState([]);
 
   const API_URL = 'https://bo-synergy-backend.onrender.com/api';
 
@@ -735,6 +754,87 @@ function App() {
       setMensajeExamen(`Error al registrar ${tipoExamen.toUpperCase()}`);
       console.error(error);
     }
+  };
+
+  // ===== BITÁCORA =====
+  const cargarBitacoraLog = async () => {
+    try {
+      const response = await api.get(`${API_URL}/bitacora_registros`, { params: { search: bitacoraBusqueda } });
+      setBitacoraLog(response.data);
+    } catch (error) {
+      console.error('Error al cargar bitácora:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (subVistaConsultas === 'bitacora' && usuario) {
+      cargarBitacoraLog();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subVistaConsultas, bitacoraBusqueda, usuario]);
+
+  const handleChangeBitacora = (e) => {
+    setBitacoraForm({ ...bitacoraForm, [e.target.name]: e.target.value });
+  };
+
+  const handleGuardarBitacora = async (e) => {
+    e.preventDefault();
+    if (!bitacoraPaciente) {
+      toast.error('Selecciona un paciente');
+      return;
+    }
+    try {
+      await api.post(`${API_URL}/bitacora_registros`, {
+        paciente_id: bitacoraPaciente.id,
+        fecha: bitacoraForm.fecha,
+        hora: bitacoraForm.hora,
+        alergias: bitacoraForm.alergias === 'si',
+        embarazo: bitacoraForm.embarazo === 'si',
+        cie10: bitacoraForm.cie10 === 'OTROS' ? bitacoraForm.cie10Otro : bitacoraForm.cie10,
+        tratamiento: bitacoraForm.tratamiento,
+        firma: bitacoraForm.firma
+      });
+      toast.success('Registro de bitácora guardado');
+      setBitacoraPaciente(null);
+      setBitacoraForm({
+        fecha: new Date().toISOString().split('T')[0],
+        hora: new Date().toTimeString().slice(0, 5),
+        alergias: 'no',
+        embarazo: 'no',
+        cie10: '',
+        cie10Otro: '',
+        tratamiento: '',
+        firma: ''
+      });
+      cargarBitacoraLog();
+    } catch (error) {
+      toast.error('Error al guardar el registro de bitácora');
+      console.error(error);
+    }
+  };
+
+  const exportarBitacoraExcel = () => {
+    if (bitacoraLog.length === 0) {
+      toast.error('No hay registros de bitácora para exportar');
+      return;
+    }
+    const datos = bitacoraLog.map(b => ({
+      'Fecha': b.fecha ? new Date(b.fecha).toLocaleDateString('es-MX') : '',
+      'Hora': b.hora || '',
+      'Nombre': b.paciente_nombre,
+      'Área': b.paciente_area || '',
+      'Puesto': b.paciente_puesto || '',
+      'Alergias': b.alergias ? 'Sí' : 'No',
+      'Embarazo': b.embarazo ? 'Sí' : 'No',
+      'CIE-10': b.cie10 || '',
+      'Tratamiento': b.tratamiento || '',
+      'Firma': b.firma || ''
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(datos);
+    XLSX.utils.book_append_sheet(wb, ws, 'Bitácora');
+    XLSX.writeFile(wb, `Bitacora_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success(`${bitacoraLog.length} registros exportados correctamente`);
   };
 
   // ===== FUNCIONES DE PDFs =====
@@ -1494,6 +1594,23 @@ function App() {
 
         {vistaActiva === 'consultas' && (
         <>
+        <div style={styles.subNav}>
+          {[
+            { id: 'pacientes', label: 'Pacientes' },
+            { id: 'bitacora', label: 'Bitácora' },
+          ].map(item => (
+            <button
+              key={item.id}
+              onClick={() => setSubVistaConsultas(item.id)}
+              style={subVistaConsultas === item.id ? styles.subNavButtonActive : styles.subNavButton}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {subVistaConsultas === 'pacientes' && (
+        <>
         {/* Grid principal */}
         <div style={styles.mainGrid}>
           {/* Formulario de Pacientes */}
@@ -1583,6 +1700,83 @@ function App() {
             )}
           </div>
         </div>
+        </>
+        )}
+
+        {subVistaConsultas === 'bitacora' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Nuevo registro de bitácora</h3>
+            </div>
+            <form onSubmit={handleGuardarBitacora} style={styles.cardForm}>
+              <BuscadorPaciente
+                apiUrl={API_URL}
+                empresaId={usuario?.empresa_id}
+                pacienteSeleccionado={bitacoraPaciente}
+                onSeleccionar={setBitacoraPaciente}
+              />
+              <input type="date" name="fecha" value={bitacoraForm.fecha} onChange={handleChangeBitacora} style={styles.cardInput} required />
+              <input type="time" name="hora" value={bitacoraForm.hora} onChange={handleChangeBitacora} style={styles.cardInput} required />
+              <label style={styles.inlineLabel}>
+                Alergias
+                <select name="alergias" value={bitacoraForm.alergias} onChange={handleChangeBitacora} style={styles.cardInput}>
+                  <option value="no">No</option>
+                  <option value="si">Sí</option>
+                </select>
+              </label>
+              <label style={styles.inlineLabel}>
+                Embarazo
+                <select name="embarazo" value={bitacoraForm.embarazo} onChange={handleChangeBitacora} style={styles.cardInput}>
+                  <option value="no">No</option>
+                  <option value="si">Sí</option>
+                </select>
+              </label>
+              <SelectorCIE10
+                value={bitacoraForm.cie10}
+                textoOtro={bitacoraForm.cie10Otro}
+                onChangeValue={(codigo) => setBitacoraForm({ ...bitacoraForm, cie10: codigo })}
+                onChangeTextoOtro={(texto) => setBitacoraForm({ ...bitacoraForm, cie10Otro: texto })}
+              />
+              <textarea name="tratamiento" placeholder="Tratamiento" value={bitacoraForm.tratamiento} onChange={handleChangeBitacora} rows="3" style={styles.cardInput} />
+              <input name="firma" placeholder="Firma" value={bitacoraForm.firma} onChange={handleChangeBitacora} style={styles.cardInput} />
+              <button type="submit" style={styles.saveButton}>Guardar registro</button>
+            </form>
+          </div>
+
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Log de bitácora</h3>
+              <button onClick={exportarBitacoraExcel} style={styles.exportButton}>
+                Exportar Excel
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="Buscar por fecha, nombre o área..."
+              value={bitacoraBusqueda}
+              onChange={(e) => setBitacoraBusqueda(e.target.value)}
+              style={styles.cardInput}
+            />
+            {bitacoraLog.length === 0 ? (
+              <p style={styles.emptyText}>No hay registros de bitácora aún</p>
+            ) : (
+              <ul style={styles.patientList}>
+                {bitacoraLog.map(b => (
+                  <li key={b.id} style={styles.patientItem}>
+                    <strong>{b.paciente_nombre}</strong>
+                    <span style={styles.patientInfo}>
+                      {new Date(b.fecha).toLocaleDateString('es-MX')} {b.hora || ''} · Área: {b.paciente_area || '—'}
+                      {b.alergias ? ' · Alergias' : ''}{b.embarazo ? ' · Embarazo' : ''}
+                      {b.cie10 ? ` · CIE-10: ${b.cie10}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        )}
         </>
         )}
 
@@ -2495,6 +2689,41 @@ const styles = {
     fontWeight: '500',
     color: accent,
     cursor: 'pointer',
+    fontFamily: fontBody,
+  },
+  subNav: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '20px',
+    flexWrap: 'wrap',
+  },
+  subNavButton: {
+    background: '#fff',
+    border: `1px solid ${border}`,
+    borderRadius: '20px',
+    padding: '8px 18px',
+    fontSize: '13px',
+    fontWeight: '500',
+    color: muted,
+    cursor: 'pointer',
+    fontFamily: fontBody,
+  },
+  subNavButtonActive: {
+    background: accentLight,
+    border: `1px solid ${accent}`,
+    borderRadius: '20px',
+    padding: '8px 18px',
+    fontSize: '13px',
+    fontWeight: '500',
+    color: accent,
+    cursor: 'pointer',
+    fontFamily: fontBody,
+  },
+  inlineLabel: {
+    display: 'block',
+    fontSize: '13px',
+    color: muted,
+    margin: '8px 0 4px',
     fontFamily: fontBody,
   },
   headerLeft: {

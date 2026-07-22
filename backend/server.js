@@ -506,6 +506,56 @@ app.get('/api/vulnerabilidad/:pacienteId', async (req, res) => {
   }
 });
 
+// ==================== RUTAS DE BITÁCORA ====================
+
+app.post('/api/bitacora_registros', async (req, res) => {
+  const { paciente_id, empresa_id, fecha, hora, alergias, embarazo, cie10, tratamiento, firma } = req.body;
+  try {
+    const result = await queryRun(
+      `INSERT INTO bitacora_registros (paciente_id, empresa_id, fecha, hora, alergias, embarazo, cie10, tratamiento, firma)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+      [paciente_id, empresa_id, fecha, hora, alergias, embarazo, cie10, tratamiento, firma]
+    );
+    res.json({ id: result.rows[0]?.id, message: 'Registro de bitácora guardado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/bitacora_registros/:pacienteId', async (req, res) => {
+  const { pacienteId } = req.params;
+  try {
+    const result = await query(
+      'SELECT * FROM bitacora_registros WHERE paciente_id = $1 ORDER BY fecha DESC, hora DESC',
+      [pacienteId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Log general de bitácora con filtro por fecha/hora/nombre/área, para la
+// vista de búsqueda (distinta de "listar por paciente" de arriba).
+app.get('/api/bitacora_registros', async (req, res) => {
+  const { search = '', empresa_id } = req.query;
+  try {
+    const searchTerm = `%${search}%`;
+    const result = await query(
+      `SELECT b.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
+       FROM bitacora_registros b
+       JOIN pacientes p ON p.id = b.paciente_id
+       WHERE b.empresa_id = $1
+         AND (p.nombre ILIKE $2 OR p.area ILIKE $2 OR b.fecha::text ILIKE $2)
+       ORDER BY b.fecha DESC, b.hora DESC`,
+      [empresa_id, searchTerm]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== RUTAS DE AUTENTICACIÓN ====================
 
 app.post('/api/login', async (req, res) => {

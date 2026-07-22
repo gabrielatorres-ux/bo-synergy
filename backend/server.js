@@ -559,6 +559,54 @@ app.get('/api/bitacora_registros', async (req, res) => {
   }
 });
 
+// ==================== RUTAS DE INCAPACIDADES ====================
+
+app.post('/api/incapacidades', async (req, res) => {
+  const { paciente_id, empresa_id, fecha, hora, tipo, descripcion, dias, manejo, adjunto_url } = req.body;
+  try {
+    const result = await queryRun(
+      `INSERT INTO incapacidades (paciente_id, empresa_id, fecha, hora, tipo, descripcion, dias, manejo, adjunto_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+      [paciente_id, empresa_id, fecha, hora, tipo, descripcion, dias, manejo, adjunto_url]
+    );
+    res.json({ id: result.rows[0]?.id, message: 'Incapacidad registrada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/incapacidades/:pacienteId', async (req, res) => {
+  const { pacienteId } = req.params;
+  try {
+    const result = await query(
+      'SELECT * FROM incapacidades WHERE paciente_id = $1 ORDER BY fecha DESC, hora DESC',
+      [pacienteId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/incapacidades', async (req, res) => {
+  const { search = '', empresa_id } = req.query;
+  try {
+    const searchTerm = `%${search}%`;
+    const result = await query(
+      `SELECT i.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
+       FROM incapacidades i
+       JOIN pacientes p ON p.id = i.paciente_id
+       WHERE i.empresa_id = $1
+         AND (p.nombre ILIKE $2 OR p.area ILIKE $2 OR i.fecha::text ILIKE $2)
+       ORDER BY i.fecha DESC, i.hora DESC`,
+      [empresa_id, searchTerm]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== RUTAS DE AUTENTICACIÓN ====================
 
 app.post('/api/login', async (req, res) => {

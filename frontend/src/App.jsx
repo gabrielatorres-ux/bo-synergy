@@ -11,6 +11,20 @@ import './App.css';
 
 const api = axios.create();
 
+const ETIQUETAS_TIPO_INCAPACIDAD = {
+  general: 'General',
+  embarazo_lactancia: 'Embarazo/Lactancia',
+  accidente_trabajo: 'Accidente de trabajo',
+  accidente_trayecto: 'Accidente de trayecto',
+  comision: 'Comisión'
+};
+
+const ETIQUETAS_MANEJO_INCAPACIDAD = {
+  imss: 'IMSS',
+  particular: 'Particular',
+  interno: 'Interno'
+};
+
 function App() {
   const [usuario, setUsuario] = useState(null);
   const [numEmpleado, setNumEmpleado] = useState('');
@@ -106,6 +120,20 @@ function App() {
   const [mensajeBitacora, setMensajeBitacora] = useState('');
   const [bitacoraBusqueda, setBitacoraBusqueda] = useState('');
   const [bitacoraLog, setBitacoraLog] = useState([]);
+
+  const [incapacidadPaciente, setIncapacidadPaciente] = useState(null);
+  const [incapacidadForm, setIncapacidadForm] = useState({
+    fecha: new Date().toISOString().split('T')[0],
+    hora: new Date().toTimeString().slice(0, 5),
+    tipo: 'general',
+    descripcion: '',
+    dias: '',
+    manejo: 'imss'
+  });
+  const [incapacidadArchivo, setIncapacidadArchivo] = useState(null);
+  const [incapacidadBusqueda, setIncapacidadBusqueda] = useState('');
+  const [incapacidadLog, setIncapacidadLog] = useState([]);
+  const [guardandoIncapacidad, setGuardandoIncapacidad] = useState(false);
 
   const API_URL = 'https://bo-synergy-backend.onrender.com/api';
 
@@ -857,6 +885,96 @@ function App() {
     XLSX.utils.book_append_sheet(wb, ws, 'Bitácora');
     XLSX.writeFile(wb, `Bitacora_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast.success(`${bitacoraLog.length} registros exportados correctamente`);
+  };
+
+  // ===== REGISTRO DE INCAPACIDAD =====
+  const cargarIncapacidadLog = async () => {
+    try {
+      const response = await api.get(`${API_URL}/incapacidades`, { params: { search: incapacidadBusqueda } });
+      setIncapacidadLog(response.data);
+    } catch (error) {
+      console.error('Error al cargar incapacidades:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (subVistaConsultas === 'incapacidad' && usuario) {
+      cargarIncapacidadLog();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subVistaConsultas, incapacidadBusqueda, usuario]);
+
+  const handleChangeIncapacidad = (e) => {
+    setIncapacidadForm({ ...incapacidadForm, [e.target.name]: e.target.value });
+  };
+
+  const handleGuardarIncapacidad = async (e) => {
+    e.preventDefault();
+    if (!incapacidadPaciente) {
+      toast.error('Selecciona un paciente');
+      return;
+    }
+    setGuardandoIncapacidad(true);
+    try {
+      let adjuntoUrl = null;
+      if (incapacidadArchivo) {
+        const datosArchivo = new FormData();
+        datosArchivo.append('archivo', incapacidadArchivo);
+        const respuestaArchivo = await api.post(`${API_URL}/adjuntos`, datosArchivo);
+        adjuntoUrl = respuestaArchivo.data.url;
+      }
+      await api.post(`${API_URL}/incapacidades`, {
+        paciente_id: incapacidadPaciente.id,
+        fecha: incapacidadForm.fecha,
+        hora: incapacidadForm.hora,
+        tipo: incapacidadForm.tipo,
+        descripcion: incapacidadForm.descripcion,
+        dias: incapacidadForm.dias || null,
+        manejo: incapacidadForm.manejo,
+        adjunto_url: adjuntoUrl
+      });
+      toast.success('Incapacidad registrada correctamente');
+      setIncapacidadPaciente(null);
+      setIncapacidadArchivo(null);
+      setIncapacidadForm({
+        fecha: new Date().toISOString().split('T')[0],
+        hora: new Date().toTimeString().slice(0, 5),
+        tipo: 'general',
+        descripcion: '',
+        dias: '',
+        manejo: 'imss'
+      });
+      cargarIncapacidadLog();
+    } catch (error) {
+      toast.error('Error al registrar la incapacidad');
+      console.error(error);
+    } finally {
+      setGuardandoIncapacidad(false);
+    }
+  };
+
+  const exportarIncapacidadExcel = () => {
+    if (incapacidadLog.length === 0) {
+      toast.error('No hay incapacidades para exportar');
+      return;
+    }
+    const datos = incapacidadLog.map(i => ({
+      'Fecha': i.fecha ? new Date(i.fecha).toLocaleDateString('es-MX') : '',
+      'Hora': i.hora || '',
+      'Nombre': i.paciente_nombre,
+      'Área': i.paciente_area || '',
+      'Puesto': i.paciente_puesto || '',
+      'Tipo': ETIQUETAS_TIPO_INCAPACIDAD[i.tipo] || i.tipo,
+      'Descripción': i.descripcion || '',
+      'Días': i.dias || '',
+      'Manejo': ETIQUETAS_MANEJO_INCAPACIDAD[i.manejo] || i.manejo,
+      'Adjunto': i.adjunto_url || ''
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(datos);
+    XLSX.utils.book_append_sheet(wb, ws, 'Incapacidades');
+    XLSX.writeFile(wb, `Incapacidades_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success(`${incapacidadLog.length} registros exportados correctamente`);
   };
 
   // ===== FUNCIONES DE PDFs =====
@@ -1620,6 +1738,7 @@ function App() {
           {[
             { id: 'pacientes', label: 'Pacientes' },
             { id: 'bitacora', label: 'Bitácora' },
+            { id: 'incapacidad', label: 'Incapacidades' },
           ].map(item => (
             <button
               key={item.id}
@@ -1801,6 +1920,87 @@ function App() {
                       {new Date(b.fecha).toLocaleDateString('es-MX')} {b.hora || ''} · Área: {b.paciente_area || '—'}
                       {b.alergias ? ' · Alergias' : ''}{b.embarazo ? ' · Embarazo' : ''}
                       {b.cie10 ? ` · CIE-10: ${b.cie10}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        )}
+
+        {subVistaConsultas === 'incapacidad' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Nuevo registro de incapacidad</h3>
+            </div>
+            <form onSubmit={handleGuardarIncapacidad} style={styles.cardForm}>
+              <BuscadorPaciente
+                apiUrl={API_URL}
+                empresaId={usuario?.empresa_id}
+                pacienteSeleccionado={incapacidadPaciente}
+                onSeleccionar={setIncapacidadPaciente}
+              />
+              <input type="date" name="fecha" value={incapacidadForm.fecha} onChange={handleChangeIncapacidad} style={styles.cardInput} required />
+              <input type="time" name="hora" value={incapacidadForm.hora} onChange={handleChangeIncapacidad} style={styles.cardInput} required />
+              <label style={styles.inlineLabel}>
+                Tipo de incapacidad
+                <select name="tipo" value={incapacidadForm.tipo} onChange={handleChangeIncapacidad} style={styles.cardInput}>
+                  {Object.entries(ETIQUETAS_TIPO_INCAPACIDAD).map(([valor, etiqueta]) => (
+                    <option key={valor} value={valor}>{etiqueta}</option>
+                  ))}
+                </select>
+              </label>
+              <textarea name="descripcion" placeholder="Breve descripción" value={incapacidadForm.descripcion} onChange={handleChangeIncapacidad} rows="3" style={styles.cardInput} />
+              <input type="number" min="0" name="dias" placeholder="Días de incapacidad" value={incapacidadForm.dias} onChange={handleChangeIncapacidad} style={styles.cardInput} />
+              <label style={styles.inlineLabel}>
+                Manejo
+                <select name="manejo" value={incapacidadForm.manejo} onChange={handleChangeIncapacidad} style={styles.cardInput}>
+                  {Object.entries(ETIQUETAS_MANEJO_INCAPACIDAD).map(([valor, etiqueta]) => (
+                    <option key={valor} value={valor}>{etiqueta}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={styles.fileLabel}>
+                {incapacidadArchivo ? incapacidadArchivo.name : 'Adjuntar archivo (opcional)'}
+                <input type="file" onChange={(e) => setIncapacidadArchivo(e.target.files[0] || null)} style={{ display: 'none' }} />
+              </label>
+              <button type="submit" style={styles.saveButton} disabled={guardandoIncapacidad}>
+                {guardandoIncapacidad ? 'Guardando...' : 'Guardar registro'}
+              </button>
+            </form>
+          </div>
+
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Log de incapacidades</h3>
+              <button onClick={exportarIncapacidadExcel} style={styles.exportButton}>
+                Exportar Excel
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="Buscar por fecha, nombre o área..."
+              value={incapacidadBusqueda}
+              onChange={(e) => setIncapacidadBusqueda(e.target.value)}
+              style={styles.cardInput}
+            />
+            {incapacidadLog.length === 0 ? (
+              <p style={styles.emptyText}>No hay incapacidades registradas aún</p>
+            ) : (
+              <ul style={styles.patientList}>
+                {incapacidadLog.map(i => (
+                  <li key={i.id} style={styles.patientItem}>
+                    <strong>{i.paciente_nombre}</strong>
+                    <span style={styles.patientInfo}>
+                      {new Date(i.fecha).toLocaleDateString('es-MX')} {i.hora || ''} · Área: {i.paciente_area || '—'}
+                      {' · '}{ETIQUETAS_TIPO_INCAPACIDAD[i.tipo] || i.tipo}
+                      {i.dias ? ` · ${i.dias} días` : ''}
+                      {' · '}{ETIQUETAS_MANEJO_INCAPACIDAD[i.manejo] || i.manejo}
+                      {i.adjunto_url && (
+                        <> · <a href={i.adjunto_url} target="_blank" rel="noreferrer">Adjunto</a></>
+                      )}
                     </span>
                   </li>
                 ))}

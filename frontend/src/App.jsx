@@ -25,6 +25,14 @@ const ETIQUETAS_MANEJO_INCAPACIDAD = {
   interno: 'Interno'
 };
 
+const ETIQUETAS_TIPO_SEGUIMIENTO = {
+  cronicas: 'Enfermedades crónicas',
+  embarazadas_lactantes: 'Embarazadas y lactantes',
+  incapacidades: 'Incapacidades',
+  restricciones: 'Restricciones',
+  otros: 'Otros'
+};
+
 function App() {
   const [usuario, setUsuario] = useState(null);
   const [numEmpleado, setNumEmpleado] = useState('');
@@ -134,6 +142,16 @@ function App() {
   const [incapacidadBusqueda, setIncapacidadBusqueda] = useState('');
   const [incapacidadLog, setIncapacidadLog] = useState([]);
   const [guardandoIncapacidad, setGuardandoIncapacidad] = useState(false);
+
+  const [seguimientoPaciente, setSeguimientoPaciente] = useState(null);
+  const [seguimientoForm, setSeguimientoForm] = useState({
+    fecha: new Date().toISOString().split('T')[0],
+    hora: new Date().toTimeString().slice(0, 5),
+    tipo: 'cronicas',
+    observacion: ''
+  });
+  const [seguimientoBusqueda, setSeguimientoBusqueda] = useState('');
+  const [seguimientoLog, setSeguimientoLog] = useState([]);
 
   const API_URL = 'https://bo-synergy-backend.onrender.com/api';
 
@@ -977,6 +995,77 @@ function App() {
     toast.success(`${incapacidadLog.length} registros exportados correctamente`);
   };
 
+  // ===== SEGUIMIENTO =====
+  const cargarSeguimientoLog = async () => {
+    try {
+      const response = await api.get(`${API_URL}/seguimientos`, { params: { search: seguimientoBusqueda } });
+      setSeguimientoLog(response.data);
+    } catch (error) {
+      console.error('Error al cargar seguimientos:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (subVistaConsultas === 'seguimiento' && usuario) {
+      cargarSeguimientoLog();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subVistaConsultas, seguimientoBusqueda, usuario]);
+
+  const handleChangeSeguimiento = (e) => {
+    setSeguimientoForm({ ...seguimientoForm, [e.target.name]: e.target.value });
+  };
+
+  const handleGuardarSeguimiento = async (e) => {
+    e.preventDefault();
+    if (!seguimientoPaciente) {
+      toast.error('Selecciona un paciente');
+      return;
+    }
+    try {
+      await api.post(`${API_URL}/seguimientos`, {
+        paciente_id: seguimientoPaciente.id,
+        fecha: seguimientoForm.fecha,
+        hora: seguimientoForm.hora,
+        tipo: seguimientoForm.tipo,
+        observacion: seguimientoForm.observacion
+      });
+      toast.success('Seguimiento registrado correctamente');
+      setSeguimientoPaciente(null);
+      setSeguimientoForm({
+        fecha: new Date().toISOString().split('T')[0],
+        hora: new Date().toTimeString().slice(0, 5),
+        tipo: 'cronicas',
+        observacion: ''
+      });
+      cargarSeguimientoLog();
+    } catch (error) {
+      toast.error('Error al registrar el seguimiento');
+      console.error(error);
+    }
+  };
+
+  const exportarSeguimientoExcel = () => {
+    if (seguimientoLog.length === 0) {
+      toast.error('No hay seguimientos para exportar');
+      return;
+    }
+    const datos = seguimientoLog.map(s => ({
+      'Fecha': s.fecha ? new Date(s.fecha).toLocaleDateString('es-MX') : '',
+      'Hora': s.hora || '',
+      'Nombre': s.paciente_nombre,
+      'Área': s.paciente_area || '',
+      'Puesto': s.paciente_puesto || '',
+      'Tipo': ETIQUETAS_TIPO_SEGUIMIENTO[s.tipo] || s.tipo,
+      'Observación': s.observacion || ''
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(datos);
+    XLSX.utils.book_append_sheet(wb, ws, 'Seguimientos');
+    XLSX.writeFile(wb, `Seguimientos_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success(`${seguimientoLog.length} registros exportados correctamente`);
+  };
+
   // ===== FUNCIONES DE PDFs =====
   const generarConstanciaPDF = (consulta, paciente) => {
     const doc = new jsPDF();
@@ -1739,6 +1828,7 @@ function App() {
             { id: 'pacientes', label: 'Pacientes' },
             { id: 'bitacora', label: 'Bitácora' },
             { id: 'incapacidad', label: 'Incapacidades' },
+            { id: 'seguimiento', label: 'Seguimiento' },
           ].map(item => (
             <button
               key={item.id}
@@ -2001,6 +2091,75 @@ function App() {
                       {i.adjunto_url && (
                         <> · <a href={i.adjunto_url} target="_blank" rel="noreferrer">Adjunto</a></>
                       )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        )}
+
+        {subVistaConsultas === 'seguimiento' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Nuevo seguimiento</h3>
+            </div>
+            <form onSubmit={handleGuardarSeguimiento} style={styles.cardForm}>
+              <BuscadorPaciente
+                apiUrl={API_URL}
+                empresaId={usuario?.empresa_id}
+                pacienteSeleccionado={seguimientoPaciente}
+                onSeleccionar={setSeguimientoPaciente}
+              />
+              <input type="date" name="fecha" value={seguimientoForm.fecha} onChange={handleChangeSeguimiento} style={styles.cardInput} required />
+              <input type="time" name="hora" value={seguimientoForm.hora} onChange={handleChangeSeguimiento} style={styles.cardInput} required />
+              <label style={styles.inlineLabel}>
+                Tipo de seguimiento
+                <select name="tipo" value={seguimientoForm.tipo} onChange={handleChangeSeguimiento} style={styles.cardInput}>
+                  {Object.entries(ETIQUETAS_TIPO_SEGUIMIENTO).map(([valor, etiqueta]) => (
+                    <option key={valor} value={valor}>{etiqueta}</option>
+                  ))}
+                </select>
+              </label>
+              <textarea
+                name="observacion"
+                placeholder="Observación, diagnóstico (CIE-10) y tratamiento"
+                value={seguimientoForm.observacion}
+                onChange={handleChangeSeguimiento}
+                rows="4"
+                style={styles.cardInput}
+              />
+              <button type="submit" style={styles.saveButton}>Guardar seguimiento</button>
+            </form>
+          </div>
+
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Log de seguimientos</h3>
+              <button onClick={exportarSeguimientoExcel} style={styles.exportButton}>
+                Exportar Excel
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="Buscar por fecha, nombre o área..."
+              value={seguimientoBusqueda}
+              onChange={(e) => setSeguimientoBusqueda(e.target.value)}
+              style={styles.cardInput}
+            />
+            {seguimientoLog.length === 0 ? (
+              <p style={styles.emptyText}>No hay seguimientos registrados aún</p>
+            ) : (
+              <ul style={styles.patientList}>
+                {seguimientoLog.map(s => (
+                  <li key={s.id} style={styles.patientItem}>
+                    <strong>{s.paciente_nombre}</strong>
+                    <span style={styles.patientInfo}>
+                      {new Date(s.fecha).toLocaleDateString('es-MX')} {s.hora || ''} · Área: {s.paciente_area || '—'}
+                      {' · '}{ETIQUETAS_TIPO_SEGUIMIENTO[s.tipo] || s.tipo}
+                      {s.observacion ? ` · ${s.observacion}` : ''}
                     </span>
                   </li>
                 ))}

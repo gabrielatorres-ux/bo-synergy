@@ -607,6 +607,54 @@ app.get('/api/incapacidades', async (req, res) => {
   }
 });
 
+// ==================== RUTAS DE SEGUIMIENTOS ====================
+
+app.post('/api/seguimientos', async (req, res) => {
+  const { paciente_id, empresa_id, fecha, hora, tipo, observacion } = req.body;
+  try {
+    const result = await queryRun(
+      `INSERT INTO seguimientos (paciente_id, empresa_id, fecha, hora, tipo, observacion)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [paciente_id, empresa_id, fecha, hora, tipo, observacion]
+    );
+    res.json({ id: result.rows[0]?.id, message: 'Seguimiento registrado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/seguimientos/:pacienteId', async (req, res) => {
+  const { pacienteId } = req.params;
+  try {
+    const result = await query(
+      'SELECT * FROM seguimientos WHERE paciente_id = $1 ORDER BY fecha DESC, hora DESC',
+      [pacienteId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/seguimientos', async (req, res) => {
+  const { search = '', empresa_id } = req.query;
+  try {
+    const searchTerm = `%${search}%`;
+    const result = await query(
+      `SELECT s.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
+       FROM seguimientos s
+       JOIN pacientes p ON p.id = s.paciente_id
+       WHERE s.empresa_id = $1
+         AND (p.nombre ILIKE $2 OR p.area ILIKE $2 OR s.fecha::text ILIKE $2)
+       ORDER BY s.fecha DESC, s.hora DESC`,
+      [empresa_id, searchTerm]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== RUTAS DE AUTENTICACIÓN ====================
 
 app.post('/api/login', async (req, res) => {

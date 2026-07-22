@@ -57,6 +57,24 @@ const ETIQUETAS_PRUEBA_EQUILIBRIO = {
   anormal: 'Anormal'
 };
 
+const ETIQUETAS_ROL = {
+  admin: 'Administrador',
+  medico: 'Médico',
+  enfermera: 'Enfermera',
+  ergonomista: 'Ergonomista',
+  nutriologo: 'Nutriólogo',
+  psicoterapeuta: 'Psicoterapeuta'
+};
+
+const COLORES_ROL = {
+  admin: '#2F6844',
+  medico: '#D9663D',
+  enfermera: '#C9922E',
+  ergonomista: '#5B7C99',
+  nutriologo: '#6E8B5E',
+  psicoterapeuta: '#8B6F9E'
+};
+
 function App() {
   const [usuario, setUsuario] = useState(null);
   const [numEmpleado, setNumEmpleado] = useState('');
@@ -1756,7 +1774,7 @@ function App() {
     const datos = usuarios.map(u => ({
       'N° Empleado': u.num_empleado,
       'Nombre': u.nombre,
-      'Rol': u.rol === 'admin' ? 'Administrador' : u.rol === 'medico' ? 'Médico' : 'Enfermera',
+      'Rol': ETIQUETAS_ROL[u.rol] || u.rol,
       'Fecha Registro': new Date(u.fecha_registro).toLocaleDateString('es-MX')
     }));
 
@@ -2144,7 +2162,7 @@ function App() {
             background: 'rgba(255,255,255,0.16)',
             color: '#fff'
           }}>
-            {usuario.rol === 'admin' ? 'Admin' : usuario.rol === 'medico' ? 'Médico' : 'Enfermera'}
+            {ETIQUETAS_ROL[usuario.rol] || usuario.rol}
           </span>
         </div>
         <button onClick={handleLogout} style={styles.logoutButton}>Cerrar Sesión</button>
@@ -2180,6 +2198,9 @@ function App() {
           )}
           {usuario.rol === 'enfermera' && (
             <p style={styles.welcomeText}>Bienvenida Enfermera. Puedes gestionar pacientes y consultas.</p>
+          )}
+          {(usuario.rol === 'ergonomista' || usuario.rol === 'nutriologo' || usuario.rol === 'psicoterapeuta') && (
+            <p style={styles.welcomeText}>Bienvenido {ETIQUETAS_ROL[usuario.rol]}. Puedes gestionar pacientes y consultas.</p>
           )}
         </div>
 
@@ -2833,6 +2854,9 @@ function App() {
                     <option value="admin">Administrador</option>
                     <option value="medico">Médico</option>
                     <option value="enfermera">Enfermera</option>
+                    <option value="ergonomista">Ergonomista</option>
+                    <option value="nutriologo">Nutriólogo</option>
+                    <option value="psicoterapeuta">Psicoterapeuta</option>
                   </select>
                   <input name="password" type="password" placeholder="Contraseña *" value={nuevoUsuario.password} onChange={handleCambioUsuario} style={styles.cardInput} required />
                   <button type="submit" style={styles.createButton}>Crear Usuario</button>
@@ -2856,10 +2880,10 @@ function App() {
                           <span style={styles.userDetail}>Empleado: {u.num_empleado}</span>
                           <span style={{
                             ...styles.roleBadge,
-                            background: u.rol === 'admin' ? '#2F6844' : u.rol === 'medico' ? '#D9663D' : '#C9922E',
+                            background: COLORES_ROL[u.rol] || '#8A8A85',
                             color: '#fff'
                           }}>
-                            {u.rol === 'admin' ? 'Admin' : u.rol === 'medico' ? 'Médico' : 'Enfermera'}
+                            {ETIQUETAS_ROL[u.rol] || u.rol}
                           </span>
                           <span style={styles.userDate}>{new Date(u.fecha_registro).toLocaleDateString('es-MX')}</span>
                         </div>

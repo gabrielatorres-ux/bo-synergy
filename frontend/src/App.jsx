@@ -2342,7 +2342,7 @@ const styles = {
     fontStyle: 'italic',
     fontSize: '15px',
     color: accent,
-    margin: '4px 0 28px 0',
+    margin: '16px 0 28px 0',
     fontWeight: '400',
   },
   welcomeText: {
@@ -2454,6 +2454,7 @@ const styles = {
     maxHeight: '64px',
     maxWidth: '260px',
     objectFit: 'contain',
+    marginTop: '20px',
     marginBottom: '12px',
   },
   headerRole: {

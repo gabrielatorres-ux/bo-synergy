@@ -108,6 +108,7 @@ function App() {
     fecha: new Date().toISOString().split('T')[0],
     motivo: '',
     alergias: 'no',
+    alergias_detalle: '',
     cabeza: '',
     cuello: '',
     torax: '',
@@ -172,7 +173,10 @@ function App() {
     fecha: new Date().toISOString().split('T')[0],
     hora: new Date().toTimeString().slice(0, 5),
     tipo: 'cronicas',
-    observacion: ''
+    observacion: '',
+    cie10: '',
+    cie10Otro: '',
+    tratamiento: ''
   });
   const [seguimientoBusqueda, setSeguimientoBusqueda] = useState('');
   const [seguimientoLog, setSeguimientoLog] = useState([]);
@@ -627,6 +631,7 @@ function App() {
       fecha: new Date().toISOString().split('T')[0],
       motivo: '',
       alergias: 'no',
+      alergias_detalle: '',
       cabeza: '',
       cuello: '',
       torax: '',
@@ -665,6 +670,7 @@ function App() {
         fecha: new Date().toISOString().split('T')[0],
         motivo: '',
         alergias: 'no',
+        alergias_detalle: '',
         cabeza: '',
         cuello: '',
         torax: '',
@@ -703,6 +709,7 @@ function App() {
       fecha: consulta.fecha || new Date().toISOString().split('T')[0],
       motivo: consulta.motivo || '',
       alergias: consulta.alergias || 'no',
+      alergias_detalle: consulta.alergias_detalle || '',
       cabeza: consulta.cabeza || '',
       cuello: consulta.cuello || '',
       torax: consulta.torax || '',
@@ -736,6 +743,7 @@ function App() {
         fecha: new Date().toISOString().split('T')[0],
         motivo: '',
         alergias: 'no',
+        alergias_detalle: '',
         cabeza: '',
         cuello: '',
         torax: '',
@@ -1096,7 +1104,9 @@ function App() {
         fecha: seguimientoForm.fecha,
         hora: seguimientoForm.hora,
         tipo: seguimientoForm.tipo,
-        observacion: seguimientoForm.observacion
+        observacion: seguimientoForm.observacion,
+        cie10: seguimientoForm.cie10 === 'OTROS' ? seguimientoForm.cie10Otro : seguimientoForm.cie10,
+        tratamiento: seguimientoForm.tratamiento
       });
       toast.success('Seguimiento registrado correctamente');
       setSeguimientoPaciente(null);
@@ -1104,7 +1114,10 @@ function App() {
         fecha: new Date().toISOString().split('T')[0],
         hora: new Date().toTimeString().slice(0, 5),
         tipo: 'cronicas',
-        observacion: ''
+        observacion: '',
+        cie10: '',
+        cie10Otro: '',
+        tratamiento: ''
       });
       cargarSeguimientoLog();
     } catch (error) {
@@ -1125,7 +1138,9 @@ function App() {
       'Área': s.paciente_area || '',
       'Puesto': s.paciente_puesto || '',
       'Tipo': ETIQUETAS_TIPO_SEGUIMIENTO[s.tipo] || s.tipo,
-      'Observación': s.observacion || ''
+      'Observación': s.observacion || '',
+      'CIE-10': s.cie10 || '',
+      'Tratamiento': s.tratamiento || ''
     }));
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(datos);
@@ -2458,12 +2473,19 @@ function App() {
               </label>
               <textarea
                 name="observacion"
-                placeholder="Observación, diagnóstico (CIE-10) y tratamiento"
+                placeholder="Observación"
                 value={seguimientoForm.observacion}
                 onChange={handleChangeSeguimiento}
-                rows="4"
+                rows="3"
                 style={styles.cardInput}
               />
+              <SelectorCIE10
+                value={seguimientoForm.cie10}
+                textoOtro={seguimientoForm.cie10Otro}
+                onChangeValue={(codigo) => setSeguimientoForm({ ...seguimientoForm, cie10: codigo })}
+                onChangeTextoOtro={(texto) => setSeguimientoForm({ ...seguimientoForm, cie10Otro: texto })}
+              />
+              <textarea name="tratamiento" placeholder="Tratamiento" value={seguimientoForm.tratamiento} onChange={handleChangeSeguimiento} rows="3" style={styles.cardInput} />
               <button type="submit" style={styles.saveButton}>Guardar seguimiento</button>
             </form>
           </div>
@@ -2493,6 +2515,8 @@ function App() {
                       {new Date(s.fecha).toLocaleDateString('es-MX')} {s.hora || ''} · Área: {s.paciente_area || '—'}
                       {' · '}{ETIQUETAS_TIPO_SEGUIMIENTO[s.tipo] || s.tipo}
                       {s.observacion ? ` · ${s.observacion}` : ''}
+                      {s.cie10 ? ` · CIE-10: ${s.cie10}` : ''}
+                      {s.tratamiento ? ` · Tratamiento: ${s.tratamiento}` : ''}
                     </span>
                   </li>
                 ))}
@@ -3073,6 +3097,13 @@ function App() {
                   </div>
                 </div>
 
+                {consultaForm.alergias === 'si' && (
+                  <div style={styles.formGroup}>
+                    <label>¿Qué alergias?</label>
+                    <input name="alergias_detalle" value={consultaForm.alergias_detalle} onChange={handleChangeConsulta} placeholder="Especifique las alergias" style={styles.cardInput} />
+                  </div>
+                )}
+
                 <div style={styles.formGroup}>
                   <label>Motivo de consulta</label>
                   <textarea name="motivo" value={consultaForm.motivo} onChange={handleChangeConsulta} rows="2" placeholder="Describa el motivo..." style={styles.cardInput} required />
@@ -3222,6 +3253,13 @@ function App() {
                     </select>
                   </div>
                 </div>
+
+                {consultaForm.alergias === 'si' && (
+                  <div style={styles.formGroup}>
+                    <label>¿Qué alergias?</label>
+                    <input name="alergias_detalle" value={consultaForm.alergias_detalle} onChange={handleChangeConsulta} placeholder="Especifique las alergias" style={styles.cardInput} />
+                  </div>
+                )}
 
                 <div style={styles.formGroup}>
                   <label>Motivo de consulta</label>

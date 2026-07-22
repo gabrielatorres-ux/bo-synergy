@@ -610,12 +610,12 @@ app.get('/api/incapacidades', async (req, res) => {
 // ==================== RUTAS DE SEGUIMIENTOS ====================
 
 app.post('/api/seguimientos', async (req, res) => {
-  const { paciente_id, empresa_id, fecha, hora, tipo, observacion } = req.body;
+  const { paciente_id, empresa_id, fecha, hora, tipo, observacion, cie10, tratamiento } = req.body;
   try {
     const result = await queryRun(
-      `INSERT INTO seguimientos (paciente_id, empresa_id, fecha, hora, tipo, observacion)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-      [paciente_id, empresa_id, fecha, hora, tipo, observacion]
+      `INSERT INTO seguimientos (paciente_id, empresa_id, fecha, hora, tipo, observacion, cie10, tratamiento)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+      [paciente_id, empresa_id, fecha, hora, tipo, observacion, cie10, tratamiento]
     );
     res.json({ id: result.rows[0]?.id, message: 'Seguimiento registrado correctamente' });
   } catch (error) {

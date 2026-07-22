@@ -581,6 +581,28 @@ app.patch('/api/usuarios/:id/resetear-password', async (req, res) => {
   }
 });
 
+// Herramienta de soporte del superadmin: resetea la contraseña de
+// cualquier usuario de cualquier empresa (por num_empleado, sin filtrar
+// por empresa_id). Cubre el caso de que el único admin de una empresa
+// olvide su contraseña y no haya nadie más ahí que pueda ayudarlo.
+app.patch('/api/usuarios/resetear-password-admin', async (req, res) => {
+  const { num_empleado, nueva_password } = req.body;
+
+  if (!num_empleado || !nueva_password) {
+    return res.status(400).json({ error: 'Todos los campos son requeridos' });
+  }
+
+  try {
+    const result = await queryRun('UPDATE usuarios SET password = $1 WHERE num_empleado = $2 RETURNING id', [nueva_password, num_empleado]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'No existe un usuario con ese número de empleado' });
+    }
+    res.json({ message: 'Contraseña actualizada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== RUTAS DE ESTADÍSTICAS ====================
 
 app.get('/api/estadisticas', async (req, res) => {

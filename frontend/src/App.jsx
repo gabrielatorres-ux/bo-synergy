@@ -47,6 +47,7 @@ function App() {
   const [nuevaEmpresaNombre, setNuevaEmpresaNombre] = useState('');
   const [nuevaEmpresaLogo, setNuevaEmpresaLogo] = useState(null);
   const [nuevaEmpresaAdmin, setNuevaEmpresaAdmin] = useState({ num_empleado: '', nombre: '', password: '' });
+  const [soporteReset, setSoporteReset] = useState({ num_empleado: '', password: '' });
   const [miEmpresaNombre, setMiEmpresaNombre] = useState('');
   const [miEmpresaLogo, setMiEmpresaLogo] = useState(null);
 
@@ -399,6 +400,20 @@ function App() {
       cargarEmpresas();
     } catch (error) {
       toast.error(`${error.response?.data?.error || 'Error al eliminar empresa'}`);
+    }
+  };
+
+  const handleResetearPasswordSoporte = async (e) => {
+    e.preventDefault();
+    try {
+      await api.patch(`${API_URL}/usuarios/resetear-password-admin`, {
+        num_empleado: soporteReset.num_empleado,
+        nueva_password: soporteReset.password
+      });
+      toast.success(`Contraseña de ${soporteReset.num_empleado} actualizada`);
+      setSoporteReset({ num_empleado: '', password: '' });
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Error al restablecer la contraseña');
     }
   };
 
@@ -1655,6 +1670,32 @@ function App() {
                   </ul>
                 )}
               </div>
+            </div>
+            <div style={styles.formCard}>
+              <div style={styles.cardHeader}>
+                <h3 style={styles.cardTitle}>Restablecer contraseña de cualquier usuario</h3>
+              </div>
+              <p style={styles.userDetail}>
+                Para cuando el único admin de una empresa olvida su contraseña y no hay nadie más ahí que se la pueda restablecer.
+              </p>
+              <form onSubmit={handleResetearPasswordSoporte} style={styles.cardForm}>
+                <input
+                  placeholder="Número de empleado *"
+                  value={soporteReset.num_empleado}
+                  onChange={(e) => setSoporteReset({ ...soporteReset, num_empleado: e.target.value })}
+                  style={styles.cardInput}
+                  required
+                />
+                <input
+                  type="password"
+                  placeholder="Nueva contraseña *"
+                  value={soporteReset.password}
+                  onChange={(e) => setSoporteReset({ ...soporteReset, password: e.target.value })}
+                  style={styles.cardInput}
+                  required
+                />
+                <button type="submit" style={styles.createButton}>Restablecer</button>
+              </form>
             </div>
           </div>
         )}

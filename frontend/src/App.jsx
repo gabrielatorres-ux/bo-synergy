@@ -38,6 +38,12 @@ const ETIQUETAS_TIPO_RESTRICCION = {
   permanente: 'Permanente'
 };
 
+const ETIQUETAS_RESULTADO_PRUEBA = {
+  positivo: 'Positivo',
+  negativo: 'Negativo',
+  no_realizada: 'No realizada'
+};
+
 function App() {
   const [usuario, setUsuario] = useState(null);
   const [numEmpleado, setNumEmpleado] = useState('');
@@ -168,6 +174,22 @@ function App() {
   });
   const [restriccionBusqueda, setRestriccionBusqueda] = useState('');
   const [restriccionLog, setRestriccionLog] = useState([]);
+
+  const [accidentePaciente, setAccidentePaciente] = useState(null);
+  const [accidenteForm, setAccidenteForm] = useState({
+    fecha: new Date().toISOString().split('T')[0],
+    hora: new Date().toTimeString().slice(0, 5),
+    hechos: '',
+    exploracion_fisica: '',
+    diagnostico: '',
+    plan_accion: '',
+    alcoholimetria: 'no_realizada',
+    antidoping: 'no_realizada'
+  });
+  const [accidenteArchivo, setAccidenteArchivo] = useState(null);
+  const [accidenteBusqueda, setAccidenteBusqueda] = useState('');
+  const [accidenteLog, setAccidenteLog] = useState([]);
+  const [guardandoAccidente, setGuardandoAccidente] = useState(false);
 
   const API_URL = 'https://bo-synergy-backend.onrender.com/api';
 
@@ -1156,6 +1178,102 @@ function App() {
     toast.success(`${restriccionLog.length} registros exportados correctamente`);
   };
 
+  // ===== REGISTRO DE ACCIDENTE =====
+  const cargarAccidenteLog = async () => {
+    try {
+      const response = await api.get(`${API_URL}/accidentes`, { params: { search: accidenteBusqueda } });
+      setAccidenteLog(response.data);
+    } catch (error) {
+      console.error('Error al cargar accidentes:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (subVistaConsultas === 'accidentes' && usuario) {
+      cargarAccidenteLog();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subVistaConsultas, accidenteBusqueda, usuario]);
+
+  const handleChangeAccidente = (e) => {
+    setAccidenteForm({ ...accidenteForm, [e.target.name]: e.target.value });
+  };
+
+  const handleGuardarAccidente = async (e) => {
+    e.preventDefault();
+    if (!accidentePaciente) {
+      toast.error('Selecciona un paciente');
+      return;
+    }
+    setGuardandoAccidente(true);
+    try {
+      let adjuntoUrl = null;
+      if (accidenteArchivo) {
+        const datosArchivo = new FormData();
+        datosArchivo.append('archivo', accidenteArchivo);
+        const respuestaArchivo = await api.post(`${API_URL}/adjuntos`, datosArchivo);
+        adjuntoUrl = respuestaArchivo.data.url;
+      }
+      await api.post(`${API_URL}/accidentes`, {
+        paciente_id: accidentePaciente.id,
+        fecha: accidenteForm.fecha,
+        hora: accidenteForm.hora,
+        hechos: accidenteForm.hechos,
+        exploracion_fisica: accidenteForm.exploracion_fisica,
+        diagnostico: accidenteForm.diagnostico,
+        plan_accion: accidenteForm.plan_accion,
+        alcoholimetria: accidenteForm.alcoholimetria,
+        antidoping: accidenteForm.antidoping,
+        adjunto_url: adjuntoUrl
+      });
+      toast.success('Accidente registrado correctamente');
+      setAccidentePaciente(null);
+      setAccidenteArchivo(null);
+      setAccidenteForm({
+        fecha: new Date().toISOString().split('T')[0],
+        hora: new Date().toTimeString().slice(0, 5),
+        hechos: '',
+        exploracion_fisica: '',
+        diagnostico: '',
+        plan_accion: '',
+        alcoholimetria: 'no_realizada',
+        antidoping: 'no_realizada'
+      });
+      cargarAccidenteLog();
+    } catch (error) {
+      toast.error('Error al registrar el accidente');
+      console.error(error);
+    } finally {
+      setGuardandoAccidente(false);
+    }
+  };
+
+  const exportarAccidenteExcel = () => {
+    if (accidenteLog.length === 0) {
+      toast.error('No hay accidentes para exportar');
+      return;
+    }
+    const datos = accidenteLog.map(a => ({
+      'Fecha': a.fecha ? new Date(a.fecha).toLocaleDateString('es-MX') : '',
+      'Hora': a.hora || '',
+      'Nombre': a.paciente_nombre,
+      'Área': a.paciente_area || '',
+      'Puesto': a.paciente_puesto || '',
+      'Hechos': a.hechos || '',
+      'Exploración física': a.exploracion_fisica || '',
+      'Diagnóstico': a.diagnostico || '',
+      'Plan de acción': a.plan_accion || '',
+      'Alcoholimetría': ETIQUETAS_RESULTADO_PRUEBA[a.alcoholimetria] || a.alcoholimetria,
+      'Antidoping': ETIQUETAS_RESULTADO_PRUEBA[a.antidoping] || a.antidoping,
+      'Adjunto': a.adjunto_url || ''
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(datos);
+    XLSX.utils.book_append_sheet(wb, ws, 'Accidentes');
+    XLSX.writeFile(wb, `Accidentes_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success(`${accidenteLog.length} registros exportados correctamente`);
+  };
+
   // ===== FUNCIONES DE PDFs =====
   const generarConstanciaPDF = (consulta, paciente) => {
     const doc = new jsPDF();
@@ -1920,6 +2038,7 @@ function App() {
             { id: 'incapacidad', label: 'Incapacidades' },
             { id: 'seguimiento', label: 'Seguimiento' },
             { id: 'restricciones', label: 'Restricciones' },
+            { id: 'accidentes', label: 'Accidentes' },
           ].map(item => (
             <button
               key={item.id}
@@ -2315,6 +2434,89 @@ function App() {
                       {' · '}{ETIQUETAS_TIPO_RESTRICCION[r.tipo] || r.tipo}
                       {r.dias ? ` · ${r.dias} días` : ''}
                       {r.descripcion ? ` · ${r.descripcion}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        )}
+
+        {subVistaConsultas === 'accidentes' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Nuevo registro de accidente</h3>
+            </div>
+            <form onSubmit={handleGuardarAccidente} style={styles.cardForm}>
+              <BuscadorPaciente
+                apiUrl={API_URL}
+                empresaId={usuario?.empresa_id}
+                pacienteSeleccionado={accidentePaciente}
+                onSeleccionar={setAccidentePaciente}
+              />
+              <input type="date" name="fecha" value={accidenteForm.fecha} onChange={handleChangeAccidente} style={styles.cardInput} required />
+              <input type="time" name="hora" value={accidenteForm.hora} onChange={handleChangeAccidente} style={styles.cardInput} required />
+              <textarea name="hechos" placeholder="Hechos" value={accidenteForm.hechos} onChange={handleChangeAccidente} rows="3" style={styles.cardInput} />
+              <textarea name="exploracion_fisica" placeholder="Exploración física" value={accidenteForm.exploracion_fisica} onChange={handleChangeAccidente} rows="2" style={styles.cardInput} />
+              <textarea name="diagnostico" placeholder="Diagnóstico" value={accidenteForm.diagnostico} onChange={handleChangeAccidente} rows="2" style={styles.cardInput} />
+              <textarea name="plan_accion" placeholder="Plan de acción" value={accidenteForm.plan_accion} onChange={handleChangeAccidente} rows="2" style={styles.cardInput} />
+              <label style={styles.inlineLabel}>
+                Alcoholimetría
+                <select name="alcoholimetria" value={accidenteForm.alcoholimetria} onChange={handleChangeAccidente} style={styles.cardInput}>
+                  {Object.entries(ETIQUETAS_RESULTADO_PRUEBA).map(([valor, etiqueta]) => (
+                    <option key={valor} value={valor}>{etiqueta}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={styles.inlineLabel}>
+                Antidoping
+                <select name="antidoping" value={accidenteForm.antidoping} onChange={handleChangeAccidente} style={styles.cardInput}>
+                  {Object.entries(ETIQUETAS_RESULTADO_PRUEBA).map(([valor, etiqueta]) => (
+                    <option key={valor} value={valor}>{etiqueta}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={styles.fileLabel}>
+                {accidenteArchivo ? accidenteArchivo.name : 'Adjuntar archivo (opcional)'}
+                <input type="file" onChange={(e) => setAccidenteArchivo(e.target.files[0] || null)} style={{ display: 'none' }} />
+              </label>
+              <button type="submit" style={styles.saveButton} disabled={guardandoAccidente}>
+                {guardandoAccidente ? 'Guardando...' : 'Guardar registro'}
+              </button>
+            </form>
+          </div>
+
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Log de accidentes</h3>
+              <button onClick={exportarAccidenteExcel} style={styles.exportButton}>
+                Exportar Excel
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="Buscar por fecha, nombre o área..."
+              value={accidenteBusqueda}
+              onChange={(e) => setAccidenteBusqueda(e.target.value)}
+              style={styles.cardInput}
+            />
+            {accidenteLog.length === 0 ? (
+              <p style={styles.emptyText}>No hay accidentes registrados aún</p>
+            ) : (
+              <ul style={styles.patientList}>
+                {accidenteLog.map(a => (
+                  <li key={a.id} style={styles.patientItem}>
+                    <strong>{a.paciente_nombre}</strong>
+                    <span style={styles.patientInfo}>
+                      {new Date(a.fecha).toLocaleDateString('es-MX')} {a.hora || ''} · Área: {a.paciente_area || '—'}
+                      {a.hechos ? ` · ${a.hechos}` : ''}
+                      {' · Alcoholimetría: '}{ETIQUETAS_RESULTADO_PRUEBA[a.alcoholimetria] || a.alcoholimetria}
+                      {' · Antidoping: '}{ETIQUETAS_RESULTADO_PRUEBA[a.antidoping] || a.antidoping}
+                      {a.adjunto_url && (
+                        <> · <a href={a.adjunto_url} target="_blank" rel="noreferrer">Adjunto</a></>
+                      )}
                     </span>
                   </li>
                 ))}

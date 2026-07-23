@@ -162,6 +162,7 @@ function App() {
   });
   const [usuarios, setUsuarios] = useState([]);
   const [asistencias, setAsistencias] = useState([]);
+  const [mostrarAsistencias, setMostrarAsistencias] = useState(false);
   const [nuevoUsuario, setNuevoUsuario] = useState({
     num_empleado: '',
     nombre: '',
@@ -452,6 +453,7 @@ function App() {
     try {
       await api.post(`${API_URL}/pacientes`, {
         ...formData,
+        num_empleado: formData.num_empleado.trim() || null,
         alergias: formData.alergias === 'si'
       });
       toast.success('Paciente agregado');
@@ -2348,7 +2350,6 @@ function App() {
               <h3 style={styles.cardTitle}>Registrar Paciente</h3>
             </div>
             <form onSubmit={handleSubmit} style={styles.cardForm}>
-              <input name="num_empleado" placeholder="Número de empleado" value={formData.num_empleado} onChange={handleChange} style={styles.cardInput} required />
               <input name="nombre" placeholder="Nombre completo" value={formData.nombre} onChange={handleChange} style={styles.cardInput} required />
               <input name="fecha_nac" placeholder="Fecha nacimiento (YYYY-MM-DD)" value={formData.fecha_nac} onChange={handleChange} style={styles.cardInput} />
               <input name="nss" placeholder="NSS" value={formData.nss} onChange={handleChange} style={styles.cardInput} />
@@ -3159,23 +3160,29 @@ function App() {
           <div style={styles.adminSection}>
             <h2 style={styles.sectionTitle}>Asistencias</h2>
             <div style={styles.listCard}>
-              <div style={styles.cardHeader}>
+              <div
+                style={{ ...styles.cardHeader, cursor: 'pointer' }}
+                onClick={() => setMostrarAsistencias(!mostrarAsistencias)}
+              >
                 <h3 style={styles.cardTitle}>Últimas checadas de entrada</h3>
+                <span style={{ color: muted, fontSize: '13px' }}>{mostrarAsistencias ? 'Ocultar ▲' : 'Mostrar ▼'}</span>
               </div>
-              {asistencias.length === 0 ? (
-                <p style={styles.emptyText}>Aún no hay checadas registradas</p>
-              ) : (
-                <ul style={styles.patientList}>
-                  {asistencias.map(a => (
-                    <li key={a.id} style={styles.userItem}>
-                      <div style={styles.userInfo}>
-                        <strong>{a.nombre}</strong>
-                        <span style={styles.userDetail}>Empleado: {a.num_empleado}</span>
-                      </div>
-                      <span style={styles.userDate}>{new Date(a.fecha_hora).toLocaleString('es-MX')}</span>
-                    </li>
-                  ))}
-                </ul>
+              {mostrarAsistencias && (
+                asistencias.length === 0 ? (
+                  <p style={styles.emptyText}>Aún no hay checadas registradas</p>
+                ) : (
+                  <ul style={styles.patientList}>
+                    {asistencias.map(a => (
+                      <li key={a.id} style={styles.userItem}>
+                        <div style={styles.userInfo}>
+                          <strong>{a.nombre}</strong>
+                          <span style={styles.userDetail}>Empleado: {a.num_empleado}</span>
+                        </div>
+                        <span style={styles.userDate}>{new Date(a.fecha_hora).toLocaleString('es-MX')}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )
               )}
             </div>
           </div>

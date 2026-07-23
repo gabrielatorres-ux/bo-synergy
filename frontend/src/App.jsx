@@ -3696,7 +3696,7 @@ function App() {
                     required
                   />
                   <input
-                    placeholder="Usuario * (ej. viviana.buitrago)"
+                    placeholder="Usuario *"
                     value={nuevaEmpresaAdmin.num_empleado}
                     onChange={(e) => setNuevaEmpresaAdmin({ ...nuevaEmpresaAdmin, num_empleado: e.target.value })}
                     style={styles.cardInput}
@@ -3755,7 +3755,7 @@ function App() {
                             ) : (
                               usuariosEmpresaExpandida.map(u => (
                                 <div key={u.id} style={{ fontSize: '13px', color: ink, padding: '2px 0' }}>
-                                  {u.nombre} — {u.num_empleado} ({ETIQUETAS_ROL[u.rol] || u.rol})
+                                  <strong>{u.nombre}</strong> — Usuario: {u.num_empleado} · Rol: {ETIQUETAS_ROL[u.rol] || u.rol}
                                 </div>
                               ))
                             )}
@@ -3783,7 +3783,7 @@ function App() {
               </p>
               <form onSubmit={handleResetearPasswordSoporte} style={styles.cardForm}>
                 <input
-                  placeholder="Número de empleado *"
+                  placeholder="Usuario *"
                   value={soporteReset.num_empleado}
                   onChange={(e) => setSoporteReset({ ...soporteReset, num_empleado: e.target.value })}
                   style={styles.cardInput}

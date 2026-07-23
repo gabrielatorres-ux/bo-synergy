@@ -2132,6 +2132,21 @@ function App() {
     return mapa[texto] || '';
   };
 
+  // Sugiere un usuario tipo "nombre.apellido" a partir del nombre completo
+  // (primera y última palabra), p. ej. "Viviana Buitrago" -> "viviana.buitrago".
+  const generarSugerenciaUsuario = (nombreCompleto) => {
+    const palabras = nombreCompleto
+      .trim()
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z\s]/g, '')
+      .split(/\s+/)
+      .filter(Boolean);
+    if (palabras.length === 0) return '';
+    if (palabras.length === 1) return palabras[0];
+    return `${palabras[0]}.${palabras[palabras.length - 1]}`;
+  };
+
   const manejarImportarUsuariosExcel = (e) => {
     const archivo = e.target.files[0];
     if (!archivo) return;
@@ -2444,11 +2459,16 @@ function App() {
                     placeholder="Tu nombre completo *"
                     value={registroForm.admin_nombre}
                     onChange={(e) => setRegistroForm({ ...registroForm, admin_nombre: e.target.value })}
+                    onBlur={(e) => {
+                      if (!registroForm.admin_num_empleado) {
+                        setRegistroForm(prev => ({ ...prev, admin_num_empleado: generarSugerenciaUsuario(e.target.value) }));
+                      }
+                    }}
                     style={styles.input}
                     required
                   />
                   <input
-                    placeholder="Usuario *"
+                    placeholder="Usuario * (ej. viviana.buitrago)"
                     value={registroForm.admin_num_empleado}
                     onChange={(e) => setRegistroForm({ ...registroForm, admin_num_empleado: e.target.value })}
                     style={styles.input}
@@ -3506,8 +3526,20 @@ function App() {
                   </div>
                 </div>
                 <form onSubmit={handleCrearUsuario} style={styles.cardForm}>
-                  <input name="num_empleado" placeholder="Número de empleado *" value={nuevoUsuario.num_empleado} onChange={handleCambioUsuario} style={styles.cardInput} required />
-                  <input name="nombre" placeholder="Nombre completo *" value={nuevoUsuario.nombre} onChange={handleCambioUsuario} style={styles.cardInput} required />
+                  <input name="num_empleado" placeholder="Número de empleado * (ej. viviana.buitrago)" value={nuevoUsuario.num_empleado} onChange={handleCambioUsuario} style={styles.cardInput} required />
+                  <input
+                    name="nombre"
+                    placeholder="Nombre completo *"
+                    value={nuevoUsuario.nombre}
+                    onChange={handleCambioUsuario}
+                    onBlur={(e) => {
+                      if (!nuevoUsuario.num_empleado) {
+                        setNuevoUsuario(prev => ({ ...prev, num_empleado: generarSugerenciaUsuario(e.target.value) }));
+                      }
+                    }}
+                    style={styles.cardInput}
+                    required
+                  />
                   <label style={styles.inlineLabel}>
                     Rol
                     <select name="rol" value={nuevoUsuario.rol} onChange={handleCambioUsuario} style={styles.select} required>
@@ -3655,11 +3687,16 @@ function App() {
                     placeholder="Nombre completo *"
                     value={nuevaEmpresaAdmin.nombre}
                     onChange={(e) => setNuevaEmpresaAdmin({ ...nuevaEmpresaAdmin, nombre: e.target.value })}
+                    onBlur={(e) => {
+                      if (!nuevaEmpresaAdmin.num_empleado) {
+                        setNuevaEmpresaAdmin(prev => ({ ...prev, num_empleado: generarSugerenciaUsuario(e.target.value) }));
+                      }
+                    }}
                     style={styles.cardInput}
                     required
                   />
                   <input
-                    placeholder="Usuario *"
+                    placeholder="Usuario * (ej. viviana.buitrago)"
                     value={nuevaEmpresaAdmin.num_empleado}
                     onChange={(e) => setNuevaEmpresaAdmin({ ...nuevaEmpresaAdmin, num_empleado: e.target.value })}
                     style={styles.cardInput}

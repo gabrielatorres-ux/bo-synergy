@@ -4177,6 +4177,11 @@ const styles = {
     color: muted,
     fontSize: '13px',
   },
+  patientInfo: {
+    marginLeft: '8px',
+    color: muted,
+    fontSize: '13px',
+  },
   roleBadge: {
     display: 'inline-block',
     padding: '3px 11px',

@@ -75,6 +75,63 @@ const COLORES_ROL = {
   psicoterapeuta: '#8B6F9E'
 };
 
+const ETIQUETAS_TIPO_EXAMEN = {
+  emi: 'EMI',
+  emp: 'EMP',
+  emr: 'EMR',
+  vulnerabilidad: 'Vulnerables y Embarazadas'
+};
+
+// Nombres amigables para exportar a Excel el log de Consulta Diaria.
+// Un mismo diccionario cubre los 4 tipos (EMI/EMP/EMR/Vulnerabilidad) porque
+// varios campos se repiten entre ellos; cada registro solo exporta las
+// columnas que realmente tiene.
+const ETIQUETAS_CAMPO_EXAMEN = {
+  fecha: 'Fecha',
+  alergia: 'Alergia',
+  embarazada: 'Embarazada',
+  embarazo: 'Embarazo',
+  impresion_diagnostica: 'Impresión Diagnóstica',
+  cie10: 'CIE-10',
+  exploracion_fisica: 'Exploración Física',
+  signos_vitales: 'Signos Vitales',
+  agudeza_visual: 'Agudeza Visual',
+  exposicion_riesgos: 'Exposición a Riesgos',
+  trabajos_previos: 'Trabajos Previos',
+  riesgos_laborales: 'Riesgos Laborales',
+  accidentes_previos: 'Accidentes Previos',
+  enfermedades_laborales: 'Enfermedades Laborales',
+  antecedentes_familiares: 'Antecedentes Familiares',
+  antecedentes_personales_no_patologicos: 'Antecedentes Personales No Patológicos',
+  antecedentes_personales_patologicos: 'Antecedentes Personales Patológicos',
+  interrogatorio_aparatos: 'Interrogatorio por Aparatos',
+  constancia_aptitud: 'Constancia de Aptitud',
+  exposicion_auditiva: 'Exposición Auditiva',
+  exposicion_respiratoria: 'Exposición Respiratoria',
+  exposicion_movimientos_repetitivos: 'Exposición a Movimientos Repetitivos',
+  exposicion_postural: 'Exposición Postural',
+  exposicion_cargas_manuales: 'Exposición a Cargas Manuales',
+  exposicion_visual: 'Exposición Visual',
+  exposicion_psicosocial: 'Exposición Psicosocial',
+  exposicion_trabajos_alto_riesgo: 'Exposición a Trabajos de Alto Riesgo',
+  solicitud_reubicacion: 'Solicitud de Reubicación',
+  secuelas_auditiva: 'Secuelas Auditivas',
+  secuelas_respiratoria: 'Secuelas Respiratorias',
+  secuelas_motriz: 'Secuelas Motrices',
+  secuelas_pensamiento: 'Secuelas del Pensamiento',
+  secuelas_fuerza: 'Secuelas de Fuerza',
+  secuelas_neurologica: 'Secuelas Neurológicas',
+  secuelas_psicosocial: 'Secuelas Psicosociales',
+  secuelas_visual: 'Secuelas Visuales',
+  recomendaciones_reingreso: 'Recomendaciones de Reingreso',
+  tipo_vulnerabilidad: 'Tipo de Vulnerabilidad',
+  cronico_degenerativa: 'Crónico Degenerativa',
+  hepato_renal: 'Hepato-Renal',
+  cardiologica: 'Cardiológica',
+  dermatologica: 'Dermatológica',
+  hematologica: 'Hematológica'
+};
+
 function App() {
   const [usuario, setUsuario] = useState(null);
   const [numEmpleado, setNumEmpleado] = useState('');
@@ -150,14 +207,14 @@ function App() {
   const [consultaEditando, setConsultaEditando] = useState(null);
   const [mostrarModalEditarConsulta, setMostrarModalEditarConsulta] = useState(false);
 
-  const [mostrarExamen, setMostrarExamen] = useState(false);
   const [tipoExamen, setTipoExamen] = useState('');
   const [examenForm, setExamenForm] = useState({});
   const [examenesPaciente, setExamenesPaciente] = useState([]);
   const [mensajeExamen, setMensajeExamen] = useState('');
+  const [consultaDiariaBusqueda, setConsultaDiariaBusqueda] = useState('');
+  const [consultaDiariaLog, setConsultaDiariaLog] = useState([]);
 
   const [subVistaConsultas, setSubVistaConsultas] = useState('pacientes');
-  const [menuConsultaDiariaId, setMenuConsultaDiariaId] = useState(null);
 
   const [bitacoraPaciente, setBitacoraPaciente] = useState(null);
   const [bitacoraForm, setBitacoraForm] = useState({
@@ -292,17 +349,6 @@ function App() {
     });
     return () => api.interceptors.request.eject(interceptorId);
   }, [usuario]);
-
-  // Cierra el menú desplegable de "Consulta Diaria" al hacer clic fuera de él.
-  useEffect(() => {
-    const cerrarMenuAlClicFuera = (e) => {
-      if (!e.target.closest('[data-consulta-diaria-menu]')) {
-        setMenuConsultaDiariaId(null);
-      }
-    };
-    document.addEventListener('mousedown', cerrarMenuAlClicFuera);
-    return () => document.removeEventListener('mousedown', cerrarMenuAlClicFuera);
-  }, []);
 
   // Carga los datos iniciales una vez que el interceptor de arriba ya
   // conoce el empresa_id del usuario logueado (por eso va en un efecto
@@ -799,7 +845,6 @@ function App() {
   const handleAbrirExamen = async (tipo, paciente) => {
     setPacienteSeleccionado(paciente);
     setTipoExamen(tipo);
-    setMostrarExamen(true);
     setMensajeExamen('');
     
     const baseForm = {
@@ -890,9 +935,16 @@ function App() {
   };
 
   const handleCerrarExamen = () => {
-    setMostrarExamen(false);
     setPacienteSeleccionado(null);
     setTipoExamen('');
+    setExamenForm({});
+    setExamenesPaciente([]);
+  };
+
+  // Igual que handleCerrarExamen pero conserva el tipo de examen elegido
+  // (EMI/EMP/EMR/Vulnerables), para buscar otro paciente sin perder la selección.
+  const handleLimpiarPacienteExamen = () => {
+    setPacienteSeleccionado(null);
     setExamenForm({});
     setExamenesPaciente([]);
   };
@@ -917,6 +969,7 @@ function App() {
       setMensajeExamen(`${tipoExamen.toUpperCase()} registrado correctamente`);
       const response = await api.get(`${API_URL}/${tipoExamen}/${pacienteSeleccionado.id}`);
       setExamenesPaciente(response.data);
+      cargarConsultaDiariaLog();
       setExamenForm({
         fecha: new Date().toISOString().split('T')[0],
         impresion_diagnostica: '',
@@ -930,6 +983,64 @@ function App() {
       setMensajeExamen(`Error al registrar ${tipoExamen.toUpperCase()}`);
       console.error(error);
     }
+  };
+
+  // Cambia el tipo de examen (EMI/EMP/EMR/Vulnerables) dentro de la pestaña
+  // Consulta Diaria; si ya hay un paciente elegido, recarga su historial de
+  // ese tipo (mismo mecanismo que handleAbrirExamen).
+  const handleSeleccionarTipoConsultaDiaria = (tipo) => {
+    if (pacienteSeleccionado) {
+      handleAbrirExamen(tipo, pacienteSeleccionado);
+    } else {
+      setTipoExamen(tipo);
+    }
+  };
+
+  const cargarConsultaDiariaLog = async () => {
+    if (!tipoExamen) return;
+    try {
+      const response = await api.get(`${API_URL}/${tipoExamen}`, { params: { search: consultaDiariaBusqueda } });
+      setConsultaDiariaLog(response.data);
+    } catch (error) {
+      console.error(`Error al cargar log de ${tipoExamen}:`, error);
+    }
+  };
+
+  useEffect(() => {
+    if (subVistaConsultas === 'consulta_diaria' && usuario) {
+      cargarConsultaDiariaLog();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subVistaConsultas, tipoExamen, consultaDiariaBusqueda, usuario]);
+
+  const exportarConsultaDiariaExcel = () => {
+    if (consultaDiariaLog.length === 0) {
+      toast.error('No hay registros para exportar');
+      return;
+    }
+    const camposExcluidos = ['id', 'paciente_id', 'created_at', 'paciente_nombre', 'paciente_area', 'paciente_puesto'];
+    const datos = consultaDiariaLog.map(registro => {
+      const fila = {
+        'Nombre': registro.paciente_nombre,
+        'Área': registro.paciente_area || '',
+        'Puesto': registro.paciente_puesto || ''
+      };
+      Object.keys(registro)
+        .filter(campo => !camposExcluidos.includes(campo))
+        .forEach(campo => {
+          const etiqueta = ETIQUETAS_CAMPO_EXAMEN[campo] || campo;
+          let valor = registro[campo];
+          if (campo === 'fecha' && valor) valor = new Date(valor).toLocaleDateString('es-MX');
+          if (typeof valor === 'boolean') valor = valor ? 'Sí' : 'No';
+          fila[etiqueta] = valor ?? '';
+        });
+      return fila;
+    });
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(datos);
+    XLSX.utils.book_append_sheet(wb, ws, ETIQUETAS_TIPO_EXAMEN[tipoExamen] || 'Consulta Diaria');
+    XLSX.writeFile(wb, `ConsultaDiaria_${tipoExamen}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success(`${consultaDiariaLog.length} registros exportados correctamente`);
   };
 
   // ===== BITÁCORA =====
@@ -2209,6 +2320,7 @@ function App() {
         <div style={styles.subNav}>
           {[
             { id: 'pacientes', label: 'Pacientes' },
+            { id: 'consulta_diaria', label: 'Consulta Diaria' },
             { id: 'bitacora', label: 'Bitácora' },
             { id: 'incapacidad', label: 'Incapacidades' },
             { id: 'seguimiento', label: 'Seguimiento' },
@@ -2290,24 +2402,6 @@ function App() {
                       </div>
                       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                         <button onClick={() => handleAbrirConsulta(p)} style={styles.consultaButton}>Consulta General</button>
-                        {(usuario.rol === 'admin' || usuario.rol === 'medico') && (
-                          <div style={{ position: 'relative' }} data-consulta-diaria-menu>
-                            <button
-                              onClick={() => setMenuConsultaDiariaId(menuConsultaDiariaId === p.id ? null : p.id)}
-                              style={styles.consultaDiariaButton}
-                            >
-                              Consulta Diaria ▾
-                            </button>
-                            {menuConsultaDiariaId === p.id && (
-                              <div style={styles.dropdownMenu}>
-                                <button onClick={() => { handleAbrirExamen('emi', p); setMenuConsultaDiariaId(null); }} style={{ ...styles.emiButton, ...styles.dropdownItem }}>EMI</button>
-                                <button onClick={() => { handleAbrirExamen('emp', p); setMenuConsultaDiariaId(null); }} style={{ ...styles.empButton, ...styles.dropdownItem }}>EMP</button>
-                                <button onClick={() => { handleAbrirExamen('emr', p); setMenuConsultaDiariaId(null); }} style={{ ...styles.emrButton, ...styles.dropdownItem }}>EMR</button>
-                                <button onClick={() => { handleAbrirExamen('vulnerabilidad', p); setMenuConsultaDiariaId(null); }} style={{ ...styles.vulnerabilidadButton, ...styles.dropdownItem }}>Vulnerables y Embarazadas</button>
-                              </div>
-                            )}
-                          </div>
-                        )}
                         <button onClick={() => handleEditarPaciente(p)} style={styles.editButton}>Editar</button>
                         <button onClick={() => handleEliminarPaciente(p.id, p.nombre)} style={styles.deleteButton}>Eliminar</button>
                       </div>
@@ -2338,6 +2432,166 @@ function App() {
           </div>
         </div>
         </>
+        )}
+
+        {subVistaConsultas === 'consulta_diaria' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Consulta Diaria</h3>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+              {Object.entries(ETIQUETAS_TIPO_EXAMEN).map(([valor, etiqueta]) => (
+                <button
+                  key={valor}
+                  onClick={() => handleSeleccionarTipoConsultaDiaria(valor)}
+                  style={tipoExamen === valor ? styles.subNavButtonActive : styles.subNavButton}
+                >
+                  {etiqueta}
+                </button>
+              ))}
+            </div>
+            <BuscadorPaciente
+              apiUrl={API_URL}
+              empresaId={usuario?.empresa_id}
+              pacienteSeleccionado={pacienteSeleccionado}
+              onSeleccionar={(p) => p ? handleAbrirExamen(tipoExamen || 'emi', p) : handleLimpiarPacienteExamen()}
+            />
+            {!tipoExamen && (
+              <p style={styles.emptyText}>Elige un tipo de examen para comenzar.</p>
+            )}
+            {tipoExamen && !pacienteSeleccionado && (
+              <p style={styles.emptyText}>Busca un paciente para ver o registrar su {ETIQUETAS_TIPO_EXAMEN[tipoExamen]}.</p>
+            )}
+            {tipoExamen && pacienteSeleccionado && (
+              <>
+                {mensajeExamen && (
+                  <div style={{
+                    ...styles.mensajeBox,
+                    background: mensajeExamen.includes('correctamente') ? accentLight : dangerLight,
+                    color: mensajeExamen.includes('correctamente') ? accentDark : danger
+                  }}>
+                    {mensajeExamen}
+                  </div>
+                )}
+                {examenesPaciente.length > 0 && (
+                  <p style={styles.emptyText}>
+                    Último registro: {new Date(examenesPaciente[0].fecha).toLocaleDateString('es-MX')}
+                  </p>
+                )}
+                <form onSubmit={handleGuardarExamen} style={styles.cardForm}>
+                  <div style={styles.formGroup}>
+                    <label>Fecha</label>
+                    <input type="date" name="fecha" value={examenForm.fecha || ''} onChange={handleChangeExamen} style={styles.cardInput} required />
+                  </div>
+
+                  {'alergia' in examenForm && (
+                    <div style={styles.formRow}>
+                      <div style={styles.formGroup}>
+                        <label>Alergia</label>
+                        <select name="alergia" value={examenForm.alergia || 'no'} onChange={handleChangeExamen} style={styles.cardInput}>
+                          <option value="no">No</option>
+                          <option value="si">Sí</option>
+                        </select>
+                      </div>
+                      <div style={styles.formGroup}>
+                        <label>Embarazada</label>
+                        <select name="embarazada" value={examenForm.embarazada || 'no'} onChange={handleChangeExamen} style={styles.cardInput}>
+                          <option value="no">No</option>
+                          <option value="si">Sí</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Campos específicos - resumidos para no alargar */}
+                  <div style={styles.formDivider}>--- Diagnóstico y Exploración ---</div>
+
+                  <div style={styles.formGroup}>
+                    <label>Impresión Diagnóstica</label>
+                    <textarea name="impresion_diagnostica" value={examenForm.impresion_diagnostica || ''} onChange={handleChangeExamen} rows="2" placeholder="Diagnóstico del médico" style={styles.cardInput} />
+                  </div>
+
+                  <div style={styles.formGroup}>
+                    <label>CIE-10</label>
+                    <input name="cie10" value={examenForm.cie10 || ''} onChange={handleChangeExamen} placeholder="Código CIE-10" style={styles.cardInput} />
+                  </div>
+
+                  <div style={styles.formGroup}>
+                    <label>Exploración Física</label>
+                    <textarea name="exploracion_fisica" value={examenForm.exploracion_fisica || ''} onChange={handleChangeExamen} rows="2" placeholder="Resultados de la exploración física" style={styles.cardInput} />
+                  </div>
+
+                  <div style={styles.formRow}>
+                    <div style={styles.formGroup}>
+                      <label>Signos Vitales</label>
+                      <input name="signos_vitales" value={examenForm.signos_vitales || ''} onChange={handleChangeExamen} placeholder="TA, FC, FR, Temp" style={styles.cardInput} />
+                    </div>
+                    <div style={styles.formGroup}>
+                      <label>Agudeza Visual</label>
+                      <input name="agudeza_visual" value={examenForm.agudeza_visual || ''} onChange={handleChangeExamen} placeholder="Resultado de agudeza visual" style={styles.cardInput} />
+                    </div>
+                  </div>
+
+                  <button type="submit" style={styles.saveButton}>Guardar Examen</button>
+                </form>
+
+                {examenesPaciente.length > 0 && (
+                  <div style={styles.historialContainer}>
+                    <h4>Historial de {ETIQUETAS_TIPO_EXAMEN[tipoExamen]}</h4>
+                    <div style={styles.historialList}>
+                      {examenesPaciente.map(e => (
+                        <div key={e.id} style={styles.historialItem}>
+                          <strong>{new Date(e.fecha).toLocaleDateString('es-MX')}</strong>
+                          <p><strong>Diagnóstico:</strong> {e.impresion_diagnostica || 'Pendiente'}</p>
+                          {e.cie10 && <p><strong>CIE-10:</strong> {e.cie10}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Log de {ETIQUETAS_TIPO_EXAMEN[tipoExamen] || 'Consulta Diaria'}</h3>
+              <button onClick={exportarConsultaDiariaExcel} style={styles.exportButton}>
+                Exportar Excel
+              </button>
+            </div>
+            {!tipoExamen ? (
+              <p style={styles.emptyText}>Elige un tipo de examen para ver su log.</p>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  placeholder="Buscar por fecha, nombre o área..."
+                  value={consultaDiariaBusqueda}
+                  onChange={(e) => setConsultaDiariaBusqueda(e.target.value)}
+                  style={styles.cardInput}
+                />
+                {consultaDiariaLog.length === 0 ? (
+                  <p style={styles.emptyText}>No hay registros aún</p>
+                ) : (
+                  <ul style={styles.patientList}>
+                    {consultaDiariaLog.map(registro => (
+                      <li key={registro.id} style={styles.patientItem}>
+                        <strong>{registro.paciente_nombre}</strong>
+                        <span style={styles.patientInfo}>
+                          {new Date(registro.fecha).toLocaleDateString('es-MX')} · Área: {registro.paciente_area || '—'}
+                          {registro.impresion_diagnostica ? ` · ${registro.impresion_diagnostica}` : ''}
+                          {registro.cie10 ? ` · CIE-10: ${registro.cie10}` : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+          </div>
+        </div>
         )}
 
         {subVistaConsultas === 'bitacora' && (
@@ -3408,110 +3662,6 @@ function App() {
           </div>
         )}
 
-        {/* Modal de Exámenes */}
-        {mostrarExamen && pacienteSeleccionado && (
-          <div style={styles.modalOverlay}>
-            <div style={styles.modalContent}>
-              <div style={styles.modalHeader}>
-                <div>
-                  <h2>Consulta Diaria — {tipoExamen.toUpperCase()}</h2>
-                  <h3>Paciente: {pacienteSeleccionado.nombre}</h3>
-                  {examenesPaciente.length > 0 && (
-                    <p style={styles.emptyText}>
-                      Último registro: {new Date(examenesPaciente[0].fecha).toLocaleDateString('es-MX')}
-                    </p>
-                  )}
-                </div>
-                <button onClick={handleCerrarExamen} style={styles.closeButton}>✕</button>
-              </div>
-
-              {mensajeExamen && (
-                <div style={{
-                  ...styles.mensajeBox,
-                  background: mensajeExamen.includes('correctamente') ? accentLight : dangerLight,
-                  color: mensajeExamen.includes('correctamente') ? accentDark : danger
-                }}>
-                  {mensajeExamen}
-                </div>
-              )}
-
-              <form onSubmit={handleGuardarExamen} style={styles.consultaForm}>
-                <div style={styles.formGroup}>
-                  <label>Fecha</label>
-                  <input type="date" name="fecha" value={examenForm.fecha || ''} onChange={handleChangeExamen} style={styles.cardInput} required />
-                </div>
-
-                {'alergia' in examenForm && (
-                  <div style={styles.formRow}>
-                    <div style={styles.formGroup}>
-                      <label>Alergia</label>
-                      <select name="alergia" value={examenForm.alergia || 'no'} onChange={handleChangeExamen} style={styles.cardInput}>
-                        <option value="no">No</option>
-                        <option value="si">Sí</option>
-                      </select>
-                    </div>
-                    <div style={styles.formGroup}>
-                      <label>Embarazada</label>
-                      <select name="embarazada" value={examenForm.embarazada || 'no'} onChange={handleChangeExamen} style={styles.cardInput}>
-                        <option value="no">No</option>
-                        <option value="si">Sí</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-
-                {/* Campos específicos - resumidos para no alargar */}
-                <div style={styles.formDivider}>--- Diagnóstico y Exploración ---</div>
-
-                <div style={styles.formGroup}>
-                  <label>Impresión Diagnóstica</label>
-                  <textarea name="impresion_diagnostica" value={examenForm.impresion_diagnostica || ''} onChange={handleChangeExamen} rows="2" placeholder="Diagnóstico del médico" style={styles.cardInput} />
-                </div>
-
-                <div style={styles.formGroup}>
-                  <label>CIE-10</label>
-                  <input name="cie10" value={examenForm.cie10 || ''} onChange={handleChangeExamen} placeholder="Código CIE-10" style={styles.cardInput} />
-                </div>
-
-                <div style={styles.formGroup}>
-                  <label>Exploración Física</label>
-                  <textarea name="exploracion_fisica" value={examenForm.exploracion_fisica || ''} onChange={handleChangeExamen} rows="2" placeholder="Resultados de la exploración física" style={styles.cardInput} />
-                </div>
-
-                <div style={styles.formRow}>
-                  <div style={styles.formGroup}>
-                    <label>Signos Vitales</label>
-                    <input name="signos_vitales" value={examenForm.signos_vitales || ''} onChange={handleChangeExamen} placeholder="TA, FC, FR, Temp" style={styles.cardInput} />
-                  </div>
-                  <div style={styles.formGroup}>
-                    <label>Agudeza Visual</label>
-                    <input name="agudeza_visual" value={examenForm.agudeza_visual || ''} onChange={handleChangeExamen} placeholder="Resultado de agudeza visual" style={styles.cardInput} />
-                  </div>
-                </div>
-
-                <div style={styles.buttonRow}>
-                  <button type="button" onClick={handleCerrarExamen} style={styles.cancelButton}>Cancelar</button>
-                  <button type="submit" style={styles.saveButton}>Guardar Examen</button>
-                </div>
-              </form>
-
-              {examenesPaciente.length > 0 && (
-                <div style={styles.historialContainer}>
-                  <h4>Historial de {tipoExamen.toUpperCase()}</h4>
-                  <div style={styles.historialList}>
-                    {examenesPaciente.map(e => (
-                      <div key={e.id} style={styles.historialItem}>
-                        <strong>{new Date(e.fecha).toLocaleDateString('es-MX')}</strong>
-                        <p><strong>Diagnóstico:</strong> {e.impresion_diagnostica || 'Pendiente'}</p>
-                        {e.cie10 && <p><strong>CIE-10:</strong> {e.cie10}</p>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -4064,53 +4214,6 @@ const styles = {
     fontWeight: '500',
     whiteSpace: 'nowrap',
     transition: 'background 0.2s',
-  },
-  emiButton: {
-    ...pastelButton(pastelBlue.bg, pastelBlue.text),
-    padding: '6px 10px',
-    fontSize: '11px',
-  },
-  empButton: {
-    ...pastelButton(pastelPurple.bg, pastelPurple.text),
-    padding: '6px 10px',
-    fontSize: '11px',
-  },
-  emrButton: {
-    ...pastelButton(pastelPink.bg, pastelPink.text),
-    padding: '6px 10px',
-    fontSize: '11px',
-  },
-  vulnerabilidadButton: {
-    ...pastelButton(pastelYellow.bg, pastelYellow.text),
-    padding: '6px 10px',
-    fontSize: '11px',
-  },
-  consultaDiariaButton: {
-    ...pastelButton(pastelBlue.bg, pastelBlue.text),
-    padding: '6px 12px',
-    fontSize: '13px',
-  },
-  dropdownMenu: {
-    position: 'absolute',
-    zIndex: 20,
-    top: '100%',
-    right: 0,
-    marginTop: '4px',
-    background: '#fff',
-    border: `1px solid ${border}`,
-    borderRadius: '4px',
-    boxShadow: '0 4px 14px rgba(0,0,0,0.12)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-    padding: '6px',
-    minWidth: '180px',
-  },
-  dropdownItem: {
-    display: 'block',
-    width: '100%',
-    textAlign: 'left',
-    fontSize: '13px',
   },
   dashboardSection: {
     marginTop: '40px',

@@ -401,6 +401,25 @@ app.get('/api/emi/:pacienteId', async (req, res) => {
   }
 });
 
+app.get('/api/emi', async (req, res) => {
+  const { search = '', empresa_id } = req.query;
+  try {
+    const searchTerm = `%${search}%`;
+    const result = await query(
+      `SELECT e.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
+       FROM emi e
+       JOIN pacientes p ON p.id = e.paciente_id
+       WHERE p.empresa_id = $1
+         AND (p.nombre ILIKE $2 OR p.area ILIKE $2 OR e.fecha::text ILIKE $2)
+       ORDER BY e.fecha DESC`,
+      [empresa_id, searchTerm]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/emp', async (req, res) => {
   const { paciente_id, fecha, exposicion_auditiva, exposicion_respiratoria,
     exposicion_movimientos_repetitivos, exposicion_postural, exposicion_cargas_manuales,
@@ -433,6 +452,25 @@ app.get('/api/emp/:pacienteId', async (req, res) => {
   const { pacienteId } = req.params;
   try {
     const result = await query('SELECT * FROM emp WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/emp', async (req, res) => {
+  const { search = '', empresa_id } = req.query;
+  try {
+    const searchTerm = `%${search}%`;
+    const result = await query(
+      `SELECT e.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
+       FROM emp e
+       JOIN pacientes p ON p.id = e.paciente_id
+       WHERE p.empresa_id = $1
+         AND (p.nombre ILIKE $2 OR p.area ILIKE $2 OR e.fecha::text ILIKE $2)
+       ORDER BY e.fecha DESC`,
+      [empresa_id, searchTerm]
+    );
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -477,6 +515,25 @@ app.get('/api/emr/:pacienteId', async (req, res) => {
   }
 });
 
+app.get('/api/emr', async (req, res) => {
+  const { search = '', empresa_id } = req.query;
+  try {
+    const searchTerm = `%${search}%`;
+    const result = await query(
+      `SELECT e.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
+       FROM emr e
+       JOIN pacientes p ON p.id = e.paciente_id
+       WHERE p.empresa_id = $1
+         AND (p.nombre ILIKE $2 OR p.area ILIKE $2 OR e.fecha::text ILIKE $2)
+       ORDER BY e.fecha DESC`,
+      [empresa_id, searchTerm]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/vulnerabilidad', async (req, res) => {
   const { paciente_id, fecha, tipo_vulnerabilidad, embarazo, cronico_degenerativa,
     hepato_renal, cardiologica, dermatologica, hematologica, impresion_diagnostica,
@@ -503,6 +560,25 @@ app.get('/api/vulnerabilidad/:pacienteId', async (req, res) => {
   const { pacienteId } = req.params;
   try {
     const result = await query('SELECT * FROM vulnerabilidad WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/vulnerabilidad', async (req, res) => {
+  const { search = '', empresa_id } = req.query;
+  try {
+    const searchTerm = `%${search}%`;
+    const result = await query(
+      `SELECT v.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
+       FROM vulnerabilidad v
+       JOIN pacientes p ON p.id = v.paciente_id
+       WHERE p.empresa_id = $1
+         AND (p.nombre ILIKE $2 OR p.area ILIKE $2 OR v.fecha::text ILIKE $2)
+       ORDER BY v.fecha DESC`,
+      [empresa_id, searchTerm]
+    );
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });

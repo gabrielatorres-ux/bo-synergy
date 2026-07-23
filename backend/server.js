@@ -261,6 +261,37 @@ app.post('/api/pacientes', async (req, res) => {
   }
 });
 
+// Alta masiva de pacientes desde un Excel (nombre, área, puesto, etc.) para
+// que una empresa no tenga que registrar empleados uno por uno.
+app.post('/api/pacientes/importar', async (req, res) => {
+  const { empresa_id, pacientes } = req.body;
+  if (!empresa_id || !Array.isArray(pacientes) || pacientes.length === 0) {
+    return res.status(400).json({ error: 'Se requiere una lista de pacientes' });
+  }
+
+  let insertados = 0;
+  const errores = [];
+  for (let i = 0; i < pacientes.length; i++) {
+    const p = pacientes[i];
+    if (!p.nombre) {
+      errores.push({ fila: i + 2, motivo: 'Falta el nombre' });
+      continue;
+    }
+    try {
+      await queryRun(
+        `INSERT INTO pacientes (num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [p.num_empleado || null, p.nombre, p.fecha_nac || null, p.nss || null, p.contacto_emergencia || null,
+          p.puesto || null, p.area || null, p.supervisor || null, empresa_id, p.alergias || false, p.alergias_detalle || null]
+      );
+      insertados++;
+    } catch (error) {
+      errores.push({ fila: i + 2, motivo: error.code === '23505' ? 'Número de empleado duplicado' : error.message });
+    }
+  }
+  res.json({ insertados, errores });
+});
+
 app.put('/api/pacientes/:id', async (req, res) => {
   const { id } = req.params;
   const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle } = req.body;
@@ -977,6 +1008,36 @@ app.post('/api/usuarios', async (req, res) => {
     }
     res.status(500).json({ error: error.message });
   }
+});
+
+// Alta masiva de usuarios desde un Excel (número de empleado, nombre, rol,
+// contraseña), para no tener que crear cuentas una por una.
+app.post('/api/usuarios/importar', async (req, res) => {
+  const { empresa_id, usuarios: listaUsuarios } = req.body;
+  if (!empresa_id || !Array.isArray(listaUsuarios) || listaUsuarios.length === 0) {
+    return res.status(400).json({ error: 'Se requiere una lista de usuarios' });
+  }
+
+  let insertados = 0;
+  const errores = [];
+  for (let i = 0; i < listaUsuarios.length; i++) {
+    const u = listaUsuarios[i];
+    if (!u.num_empleado || !u.nombre || !u.rol || !u.password) {
+      errores.push({ fila: i + 2, motivo: 'Faltan campos requeridos (número de empleado, nombre, rol o contraseña)' });
+      continue;
+    }
+    try {
+      await queryRun(
+        `INSERT INTO usuarios (num_empleado, nombre, rol, password, empresa_id, fecha_registro)
+         VALUES ($1, $2, $3, $4, $5, NOW())`,
+        [u.num_empleado, u.nombre, u.rol, u.password, empresa_id]
+      );
+      insertados++;
+    } catch (error) {
+      errores.push({ fila: i + 2, motivo: error.code === '23505' ? 'Número de empleado duplicado' : error.message });
+    }
+  }
+  res.json({ insertados, errores });
 });
 
 app.delete('/api/usuarios/:id', async (req, res) => {

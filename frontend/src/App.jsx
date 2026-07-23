@@ -1760,6 +1760,54 @@ function App() {
     toast.success(`${pacientesAExportar.length} pacientes exportados correctamente`);
   };
 
+  // Alta masiva de pacientes: la empresa sube su propio Excel (nombre, área,
+  // puesto, etc.) en vez de registrar empleados uno por uno.
+  const descargarPlantillaPacientes = () => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Nombre', 'Número de Empleado', 'Fecha Nacimiento', 'NSS', 'Contacto de Emergencia', 'Puesto', 'Área', 'Supervisor']
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Pacientes');
+    XLSX.writeFile(wb, 'Plantilla_Pacientes.xlsx');
+  };
+
+  const manejarImportarPacientesExcel = (e) => {
+    const archivo = e.target.files[0];
+    if (!archivo) return;
+    const lector = new FileReader();
+    lector.onload = async (evento) => {
+      try {
+        const wb = XLSX.read(evento.target.result, { type: 'binary' });
+        const hoja = wb.Sheets[wb.SheetNames[0]];
+        const filas = XLSX.utils.sheet_to_json(hoja);
+        const pacientesAImportar = filas.map(fila => ({
+          nombre: fila['Nombre'] || '',
+          num_empleado: fila['Número de Empleado'] ? String(fila['Número de Empleado']) : '',
+          fecha_nac: fila['Fecha Nacimiento'] || '',
+          nss: fila['NSS'] ? String(fila['NSS']) : '',
+          contacto_emergencia: fila['Contacto de Emergencia'] || '',
+          puesto: fila['Puesto'] || '',
+          area: fila['Área'] || '',
+          supervisor: fila['Supervisor'] || ''
+        }));
+        const response = await api.post(`${API_URL}/pacientes/importar`, { pacientes: pacientesAImportar });
+        const { insertados, errores } = response.data;
+        if (errores.length > 0) {
+          toast.error(`${insertados} pacientes importados, ${errores.length} con error`);
+          console.error('Errores al importar pacientes:', errores);
+        } else {
+          toast.success(`${insertados} pacientes importados correctamente`);
+        }
+        cargarPacientes(1);
+      } catch (error) {
+        toast.error('Error al leer el archivo Excel');
+        console.error(error);
+      }
+    };
+    lector.readAsBinaryString(archivo);
+    e.target.value = '';
+  };
+
   const exportarConsultasExcel = () => {
     if (consultasPaciente.length === 0) {
       toast.error('No hay consultas para exportar');
@@ -1902,6 +1950,64 @@ function App() {
 
     XLSX.writeFile(wb, `Usuarios_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast.success(`${usuarios.length} usuarios exportados correctamente`);
+  };
+
+  // Alta masiva de usuarios (cuentas de acceso) desde un Excel.
+  const descargarPlantillaUsuarios = () => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Número de Empleado', 'Nombre', 'Rol', 'Contraseña'],
+      ['', '', 'admin / medico / enfermera / ergonomista / nutriologo / psicoterapeuta', '']
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Usuarios');
+    XLSX.writeFile(wb, 'Plantilla_Usuarios.xlsx');
+  };
+
+  const normalizarRol = (valor) => {
+    if (!valor) return '';
+    const texto = valor.toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const mapa = {
+      admin: 'admin', administrador: 'admin',
+      medico: 'medico',
+      enfermera: 'enfermera',
+      ergonomista: 'ergonomista',
+      nutriologo: 'nutriologo',
+      psicoterapeuta: 'psicoterapeuta'
+    };
+    return mapa[texto] || '';
+  };
+
+  const manejarImportarUsuariosExcel = (e) => {
+    const archivo = e.target.files[0];
+    if (!archivo) return;
+    const lector = new FileReader();
+    lector.onload = async (evento) => {
+      try {
+        const wb = XLSX.read(evento.target.result, { type: 'binary' });
+        const hoja = wb.Sheets[wb.SheetNames[0]];
+        const filas = XLSX.utils.sheet_to_json(hoja);
+        const usuariosAImportar = filas.map(fila => ({
+          num_empleado: fila['Número de Empleado'] ? String(fila['Número de Empleado']) : '',
+          nombre: fila['Nombre'] || '',
+          rol: normalizarRol(fila['Rol']),
+          password: fila['Contraseña'] ? String(fila['Contraseña']) : ''
+        }));
+        const response = await api.post(`${API_URL}/usuarios/importar`, { usuarios: usuariosAImportar });
+        const { insertados, errores } = response.data;
+        if (errores.length > 0) {
+          toast.error(`${insertados} usuarios importados, ${errores.length} con error`);
+          console.error('Errores al importar usuarios:', errores);
+        } else {
+          toast.success(`${insertados} usuarios importados correctamente`);
+        }
+        cargarUsuarios();
+      } catch (error) {
+        toast.error('Error al leer el archivo Excel');
+        console.error(error);
+      }
+    };
+    lector.readAsBinaryString(archivo);
+    e.target.value = '';
   };
 
     // ===== FUNCIONES DE ENVÍO DE CORREOS =====
@@ -2081,7 +2187,7 @@ function App() {
         />
         <div style={styles.loginContainer}>
           <div style={mostrarRegistro && !registroEnviado ? styles.registroBox : styles.loginBox}>
-            <h1 style={styles.title}>WH Management</h1>
+            <h1 style={styles.title}>WH MANAGEMENT</h1>
             {empresaLogin?.logo_url ? (
               <img src={empresaLogin.logo_url} alt={empresaLogin.nombre} style={styles.loginLogo} />
             ) : empresaLogin?.nombre ? (
@@ -2348,6 +2454,16 @@ function App() {
           <div style={styles.formCard}>
             <div style={styles.cardHeader}>
               <h3 style={styles.cardTitle}>Registrar Paciente</h3>
+            </div>
+            <div style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: `1px solid ${borderLight}` }}>
+              <p style={styles.emptyText}>¿Ya tienes un Excel con tus empleados? Súbelo aquí en vez de registrarlos uno por uno.</p>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button type="button" onClick={descargarPlantillaPacientes} style={styles.plantillaButton}>Descargar plantilla</button>
+                <label style={styles.importButton}>
+                  Importar Excel
+                  <input type="file" accept=".xlsx,.xls" onChange={manejarImportarPacientesExcel} style={{ display: 'none' }} />
+                </label>
+              </div>
             </div>
             <form onSubmit={handleSubmit} style={styles.cardForm}>
               <input name="nombre" placeholder="Nombre completo" value={formData.nombre} onChange={handleChange} style={styles.cardInput} required />
@@ -3101,6 +3217,16 @@ function App() {
               <div style={styles.formCard}>
                 <div style={styles.cardHeader}>
                   <h3 style={styles.cardTitle}>Crear Nuevo Usuario</h3>
+                </div>
+                <div style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: `1px solid ${borderLight}` }}>
+                  <p style={styles.emptyText}>¿Ya tienes un Excel con tu equipo? Súbelo aquí en vez de crear cuentas una por una (columnas: Número de Empleado, Nombre, Rol, Contraseña).</p>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button type="button" onClick={descargarPlantillaUsuarios} style={styles.plantillaButton}>Descargar plantilla</button>
+                    <label style={styles.importButton}>
+                      Importar Excel
+                      <input type="file" accept=".xlsx,.xls" onChange={manejarImportarUsuariosExcel} style={{ display: 'none' }} />
+                    </label>
+                  </div>
                 </div>
                 <form onSubmit={handleCrearUsuario} style={styles.cardForm}>
                   <input name="num_empleado" placeholder="Número de empleado *" value={nuevoUsuario.num_empleado} onChange={handleCambioUsuario} style={styles.cardInput} required />
@@ -4135,6 +4261,13 @@ const styles = {
   exportButton: {
     ...pastelButton(pastelOrange.bg, pastelOrange.text),
     alignSelf: 'center',
+  },
+  importButton: {
+    ...pastelButton(pastelPurple.bg, pastelPurple.text),
+    display: 'inline-block',
+  },
+  plantillaButton: {
+    ...pastelButton(pastelTeal.bg, pastelTeal.text),
   },
   sectionTitle: {
     fontFamily: fontDisplay,

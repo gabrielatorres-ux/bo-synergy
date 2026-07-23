@@ -232,6 +232,7 @@ function App() {
   const [consultaDiariaLog, setConsultaDiariaLog] = useState([]);
 
   const [subVistaConsultas, setSubVistaConsultas] = useState('pacientes');
+  const [subVistaConfiguracion, setSubVistaConfiguracion] = useState('usuarios');
 
   const [bitacoraPaciente, setBitacoraPaciente] = useState(null);
   const [bitacoraForm, setBitacoraForm] = useState({
@@ -3454,8 +3455,30 @@ function App() {
 
         {vistaActiva === 'configuracion' && (
         <>
+        <div style={styles.subNav}>
+          {[
+            ...(usuario && usuario.rol === 'admin' ? [
+              { id: 'usuarios', label: 'Gestión de Usuarios' },
+              { id: 'asistencias', label: 'Asistencias' },
+              { id: 'mi_empresa', label: 'Mi Empresa' },
+            ] : []),
+            ...(usuario && usuario.es_superadmin ? [
+              { id: 'empresas', label: 'Gestión de Empresas' },
+              { id: 'restablecer', label: 'Restablecer Contraseña' },
+            ] : []),
+          ].map(item => (
+            <button
+              key={item.id}
+              onClick={() => setSubVistaConfiguracion(item.id)}
+              style={subVistaConfiguracion === item.id ? styles.subNavButtonActive : styles.subNavButton}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
         {/* Gestión de Usuarios - Solo Admin */}
-        {usuario && usuario.rol === 'admin' && (
+        {usuario && usuario.rol === 'admin' && subVistaConfiguracion === 'usuarios' && (
           <div style={styles.adminSection}>
             <h2 style={styles.sectionTitle}>Gestión de Usuarios</h2>
             {mensajeUsuario && (
@@ -3485,14 +3508,17 @@ function App() {
                 <form onSubmit={handleCrearUsuario} style={styles.cardForm}>
                   <input name="num_empleado" placeholder="Número de empleado *" value={nuevoUsuario.num_empleado} onChange={handleCambioUsuario} style={styles.cardInput} required />
                   <input name="nombre" placeholder="Nombre completo *" value={nuevoUsuario.nombre} onChange={handleCambioUsuario} style={styles.cardInput} required />
-                  <select name="rol" value={nuevoUsuario.rol} onChange={handleCambioUsuario} style={styles.select} required>
-                    <option value="admin">Administrador</option>
-                    <option value="medico">Médico</option>
-                    <option value="enfermera">Enfermera</option>
-                    <option value="ergonomista">Ergonomista</option>
-                    <option value="nutriologo">Nutriólogo</option>
-                    <option value="psicoterapeuta">Psicoterapeuta</option>
-                  </select>
+                  <label style={styles.inlineLabel}>
+                    Rol
+                    <select name="rol" value={nuevoUsuario.rol} onChange={handleCambioUsuario} style={styles.select} required>
+                      <option value="admin">Administrador</option>
+                      <option value="medico">Médico</option>
+                      <option value="enfermera">Enfermera</option>
+                      <option value="ergonomista">Ergonomista</option>
+                      <option value="nutriologo">Nutriólogo</option>
+                      <option value="psicoterapeuta">Psicoterapeuta</option>
+                    </select>
+                  </label>
                   <input name="password" type="password" placeholder="Contraseña *" value={nuevoUsuario.password} onChange={handleCambioUsuario} style={styles.cardInput} required />
                   <button type="submit" style={styles.createButton}>Crear Usuario</button>
                 </form>
@@ -3536,7 +3562,7 @@ function App() {
         )}
 
         {/* Asistencias - reloj checador, cada login queda registrado */}
-        {usuario.rol === 'admin' && (
+        {usuario.rol === 'admin' && subVistaConfiguracion === 'asistencias' && (
           <div style={styles.adminSection}>
             <h2 style={styles.sectionTitle}>Asistencias</h2>
             <div style={styles.listCard}>
@@ -3569,7 +3595,7 @@ function App() {
         )}
 
         {/* Mi Empresa - cualquier admin edita el nombre/logo de su propia empresa */}
-        {usuario.rol === 'admin' && (
+        {usuario.rol === 'admin' && subVistaConfiguracion === 'mi_empresa' && (
           <div style={styles.adminSection}>
             <h2 style={styles.sectionTitle}>Mi Empresa</h2>
             <div style={styles.formCard}>
@@ -3602,7 +3628,7 @@ function App() {
         )}
 
         {/* Gestión de Empresas - Solo Superadmin */}
-        {usuario.es_superadmin && (
+        {usuario.es_superadmin && subVistaConfiguracion === 'empresas' && (
           <div style={styles.adminSection}>
             <h2 style={styles.sectionTitle}>Gestión de Empresas</h2>
             <div style={styles.adminGrid}>
@@ -3704,6 +3730,13 @@ function App() {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Restablecer contraseña de cualquier usuario - Solo Superadmin */}
+        {usuario.es_superadmin && subVistaConfiguracion === 'restablecer' && (
+          <div style={styles.adminSection}>
+            <h2 style={styles.sectionTitle}>Restablecer Contraseña</h2>
             <div style={styles.formCard}>
               <div style={styles.cardHeader}>
                 <h3 style={styles.cardTitle}>Restablecer contraseña de cualquier usuario</h3>

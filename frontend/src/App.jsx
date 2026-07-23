@@ -4583,6 +4583,15 @@ const styles = {
     fontWeight: '500',
     fontSize: '14px',
   },
+  patientList: {
+    listStyle: 'none',
+    padding: 0,
+    margin: 0,
+  },
+  patientItem: {
+    borderBottom: `1px solid ${borderLight}`,
+    padding: '14px 0',
+  },
   userItem: {
     borderBottom: `1px solid ${borderLight}`,
     padding: '14px 0',

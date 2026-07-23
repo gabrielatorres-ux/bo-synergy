@@ -186,6 +186,8 @@ function App() {
   const [mensajeUsuario, setMensajeUsuario] = useState('');
 
   const [empresas, setEmpresas] = useState([]);
+  const [empresaExpandidaId, setEmpresaExpandidaId] = useState(null);
+  const [usuariosEmpresaExpandida, setUsuariosEmpresaExpandida] = useState([]);
   const [nuevaEmpresaNombre, setNuevaEmpresaNombre] = useState('');
   const [nuevaEmpresaLogo, setNuevaEmpresaLogo] = useState(null);
   const [nuevaEmpresaAdmin, setNuevaEmpresaAdmin] = useState({ num_empleado: '', nombre: '', password: '' });
@@ -682,6 +684,25 @@ function App() {
       cargarEmpresas();
     } catch (error) {
       toast.error(`${error.response?.data?.error || 'Error al eliminar empresa'}`);
+    }
+  };
+
+  const toggleExpandirEmpresa = async (emp) => {
+    if (empresaExpandidaId === emp.id) {
+      setEmpresaExpandidaId(null);
+      setUsuariosEmpresaExpandida([]);
+      return;
+    }
+    setEmpresaExpandidaId(emp.id);
+    try {
+      // Usa axios directo (no la instancia `api`) porque el interceptor
+      // sobreescribe cualquier empresa_id con el de la empresa del usuario
+      // logueado; aquí el superadmin necesita consultar OTRA empresa.
+      const response = await axios.get(`${API_URL}/usuarios`, { params: { empresa_id: emp.id } });
+      setUsuariosEmpresaExpandida(response.data);
+    } catch (error) {
+      console.error('Error al cargar usuarios de la empresa:', error);
+      setUsuariosEmpresaExpandida([]);
     }
   };
 
@@ -3605,16 +3626,16 @@ function App() {
                   />
                   <p style={styles.patientInfo}>Primer administrador de la empresa:</p>
                   <input
-                    placeholder="Número de empleado *"
-                    value={nuevaEmpresaAdmin.num_empleado}
-                    onChange={(e) => setNuevaEmpresaAdmin({ ...nuevaEmpresaAdmin, num_empleado: e.target.value })}
+                    placeholder="Nombre completo *"
+                    value={nuevaEmpresaAdmin.nombre}
+                    onChange={(e) => setNuevaEmpresaAdmin({ ...nuevaEmpresaAdmin, nombre: e.target.value })}
                     style={styles.cardInput}
                     required
                   />
                   <input
-                    placeholder="Nombre completo *"
-                    value={nuevaEmpresaAdmin.nombre}
-                    onChange={(e) => setNuevaEmpresaAdmin({ ...nuevaEmpresaAdmin, nombre: e.target.value })}
+                    placeholder="Usuario *"
+                    value={nuevaEmpresaAdmin.num_empleado}
+                    onChange={(e) => setNuevaEmpresaAdmin({ ...nuevaEmpresaAdmin, num_empleado: e.target.value })}
                     style={styles.cardInput}
                     required
                   />
@@ -3638,23 +3659,45 @@ function App() {
                 ) : (
                   <ul style={styles.patientList}>
                     {empresas.map(emp => (
-                      <li key={emp.id} style={styles.userItem}>
-                        <div style={styles.userInfo}>
-                          {emp.logo_url && (
-                            <img src={emp.logo_url} alt={emp.nombre} style={{ height: '32px', objectFit: 'contain' }} />
-                          )}
-                          <strong>{emp.nombre}</strong>
-                          {!emp.activo && (
-                            <span style={{ ...styles.roleBadge, background: '#C9922E', color: '#fff' }}>Pendiente</span>
-                          )}
-                          <span style={styles.userDetail}>{window.location.origin}/login/{emp.slug}</span>
+                      <li key={emp.id} style={{ borderBottom: `1px solid ${borderLight}`, padding: '14px 0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={styles.userInfo}>
+                            {emp.logo_url && (
+                              <img src={emp.logo_url} alt={emp.nombre} style={{ height: '32px', objectFit: 'contain' }} />
+                            )}
+                            <strong>{emp.nombre}</strong>
+                            {!emp.activo && (
+                              <span style={{ ...styles.roleBadge, background: '#C9922E', color: '#fff' }}>Pendiente</span>
+                            )}
+                            <span style={styles.userDetail}>{window.location.origin}/login/{emp.slug}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                            <button onClick={() => toggleExpandirEmpresa(emp)} style={styles.editButton}>
+                              {empresaExpandidaId === emp.id ? 'Ocultar ▲' : 'Ver detalles ▾'}
+                            </button>
+                            {!emp.activo && (
+                              <button onClick={() => handleAprobarEmpresa(emp.id)} style={styles.createButton}>Aprobar</button>
+                            )}
+                            <button onClick={() => handleEliminarEmpresa(emp.id, emp.nombre)} style={styles.deleteButton}>Eliminar</button>
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          {!emp.activo && (
-                            <button onClick={() => handleAprobarEmpresa(emp.id)} style={styles.createButton}>Aprobar</button>
-                          )}
-                          <button onClick={() => handleEliminarEmpresa(emp.id, emp.nombre)} style={styles.deleteButton}>Eliminar</button>
-                        </div>
+                        {empresaExpandidaId === emp.id && (
+                          <div style={{ marginTop: '12px', paddingLeft: '4px' }}>
+                            <p style={styles.userDetail}>
+                              Correo: {emp.correo || '—'} · Celular: {emp.celular || '—'}
+                            </p>
+                            <p style={{ ...styles.userDetail, marginTop: '8px', marginBottom: '4px' }}>Usuarios registrados:</p>
+                            {usuariosEmpresaExpandida.length === 0 ? (
+                              <p style={styles.emptyText}>Sin usuarios</p>
+                            ) : (
+                              usuariosEmpresaExpandida.map(u => (
+                                <div key={u.id} style={{ fontSize: '13px', color: ink, padding: '2px 0' }}>
+                                  {u.nombre} — {u.num_empleado} ({ETIQUETAS_ROL[u.rol] || u.rol})
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
                       </li>
                     ))}
                   </ul>

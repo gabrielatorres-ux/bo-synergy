@@ -1314,6 +1314,73 @@ app.post('/api/enviar-incapacidad', async (req, res) => {
   }
 });
 
+// ==================== RUTAS DE AGENDA ====================
+// Actividades personales del usuario (reunión, consulta, seguimiento,
+// informe) para el calendario de Mi Agenda.
+
+app.post('/api/agenda', async (req, res) => {
+  const { usuario_id, empresa_id, tipo, descripcion, fecha, hora } = req.body;
+  if (!usuario_id || !empresa_id || !tipo || !fecha) {
+    return res.status(400).json({ error: 'Faltan campos requeridos' });
+  }
+  try {
+    const result = await queryRun(
+      `INSERT INTO agenda_actividades (usuario_id, empresa_id, tipo, descripcion, fecha, hora)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [usuario_id, empresa_id, tipo, descripcion, fecha, hora || null]
+    );
+    res.json({ id: result.rows[0]?.id, message: 'Actividad registrada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/agenda', async (req, res) => {
+  const { usuario_id, empresa_id, mes, anio } = req.query;
+  if (!usuario_id || !empresa_id) {
+    return res.status(400).json({ error: 'Se requiere usuario_id y empresa_id' });
+  }
+  try {
+    let sql = 'SELECT * FROM agenda_actividades WHERE usuario_id = $1 AND empresa_id = $2';
+    const params = [usuario_id, empresa_id];
+    if (mes && anio) {
+      params.push(mes, anio);
+      sql += ` AND EXTRACT(MONTH FROM fecha) = $${params.length - 1} AND EXTRACT(YEAR FROM fecha) = $${params.length}`;
+    }
+    sql += ' ORDER BY fecha, hora';
+    const result = await query(sql, params);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/agenda/:id', async (req, res) => {
+  const { id } = req.params;
+  const { usuario_id, tipo, descripcion, fecha, hora } = req.body;
+  try {
+    await queryRun(
+      `UPDATE agenda_actividades SET tipo = $1, descripcion = $2, fecha = $3, hora = $4
+       WHERE id = $5 AND usuario_id = $6`,
+      [tipo, descripcion, fecha, hora || null, id, usuario_id]
+    );
+    res.json({ message: 'Actividad actualizada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/agenda/:id', async (req, res) => {
+  const { id } = req.params;
+  const { usuario_id } = req.query;
+  try {
+    await queryRun('DELETE FROM agenda_actividades WHERE id = $1 AND usuario_id = $2', [id, usuario_id]);
+    res.json({ message: 'Actividad eliminada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== INICIAR SERVIDOR ====================
 
 app.listen(PORT, () => {

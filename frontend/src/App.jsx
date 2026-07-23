@@ -57,6 +57,20 @@ const ETIQUETAS_PRUEBA_EQUILIBRIO = {
   anormal: 'Anormal'
 };
 
+const ETIQUETAS_TIPO_AGENDA = {
+  reunion: 'Reunión',
+  consulta: 'Consulta',
+  seguimiento: 'Seguimiento',
+  informe: 'Informe'
+};
+
+const NOMBRES_MES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+];
+
+const NOMBRES_DIA_SEMANA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
 const ETIQUETAS_ROL = {
   admin: 'Administrador',
   medico: 'Médico',
@@ -302,6 +316,14 @@ function App() {
   });
   const [altoRiesgoBusqueda, setAltoRiesgoBusqueda] = useState('');
   const [altoRiesgoLog, setAltoRiesgoLog] = useState([]);
+
+  const hoy = new Date();
+  const [agendaActividades, setAgendaActividades] = useState([]);
+  const [agendaMes, setAgendaMes] = useState(hoy.getMonth());
+  const [agendaAnio, setAgendaAnio] = useState(hoy.getFullYear());
+  const [agendaDiaSeleccionado, setAgendaDiaSeleccionado] = useState(hoy.getDate());
+  const [agendaForm, setAgendaForm] = useState({ tipo: 'reunion', descripcion: '', hora: '' });
+  const [agendaEditandoId, setAgendaEditandoId] = useState(null);
 
   const API_URL = 'https://bo-synergy-backend.onrender.com/api';
 
@@ -1554,6 +1576,117 @@ function App() {
     XLSX.utils.book_append_sheet(wb, ws, 'Alto Riesgo');
     XLSX.writeFile(wb, `TrabajoAltoRiesgo_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast.success(`${altoRiesgoLog.length} registros exportados correctamente`);
+  };
+
+  // ===== MI AGENDA =====
+  const cargarAgenda = async () => {
+    if (!usuario) return;
+    try {
+      const response = await api.get(`${API_URL}/agenda`, {
+        params: { usuario_id: usuario.id, mes: agendaMes + 1, anio: agendaAnio }
+      });
+      setAgendaActividades(response.data);
+    } catch (error) {
+      console.error('Error al cargar la agenda:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (vistaActiva === 'agenda' && usuario) {
+      cargarAgenda();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vistaActiva, agendaMes, agendaAnio, usuario]);
+
+  const irMesAnterior = () => {
+    if (agendaMes === 0) {
+      setAgendaMes(11);
+      setAgendaAnio(agendaAnio - 1);
+    } else {
+      setAgendaMes(agendaMes - 1);
+    }
+  };
+
+  const irMesSiguiente = () => {
+    if (agendaMes === 11) {
+      setAgendaMes(0);
+      setAgendaAnio(agendaAnio + 1);
+    } else {
+      setAgendaMes(agendaMes + 1);
+    }
+  };
+
+  const fechaSeleccionadaISO = () => {
+    const mm = String(agendaMes + 1).padStart(2, '0');
+    const dd = String(agendaDiaSeleccionado).padStart(2, '0');
+    return `${agendaAnio}-${mm}-${dd}`;
+  };
+
+  const actividadesDelDia = (dia) => {
+    const fechaISO = `${agendaAnio}-${String(agendaMes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+    return agendaActividades.filter(a => a.fecha.slice(0, 10) === fechaISO);
+  };
+
+  const handleChangeAgenda = (e) => {
+    setAgendaForm({ ...agendaForm, [e.target.name]: e.target.value });
+  };
+
+  const handleGuardarAgenda = async (e) => {
+    e.preventDefault();
+    try {
+      if (agendaEditandoId) {
+        await api.put(`${API_URL}/agenda/${agendaEditandoId}`, {
+          usuario_id: usuario.id,
+          tipo: agendaForm.tipo,
+          descripcion: agendaForm.descripcion,
+          fecha: fechaSeleccionadaISO(),
+          hora: agendaForm.hora
+        });
+        toast.success('Actividad actualizada correctamente');
+      } else {
+        await api.post(`${API_URL}/agenda`, {
+          usuario_id: usuario.id,
+          tipo: agendaForm.tipo,
+          descripcion: agendaForm.descripcion,
+          fecha: fechaSeleccionadaISO(),
+          hora: agendaForm.hora
+        });
+        toast.success('Actividad registrada correctamente');
+      }
+      setAgendaForm({ tipo: 'reunion', descripcion: '', hora: '' });
+      setAgendaEditandoId(null);
+      cargarAgenda();
+    } catch (error) {
+      toast.error('Error al guardar la actividad');
+      console.error(error);
+    }
+  };
+
+  const handleEditarAgenda = (actividad) => {
+    setAgendaEditandoId(actividad.id);
+    setAgendaForm({
+      tipo: actividad.tipo,
+      descripcion: actividad.descripcion || '',
+      hora: actividad.hora ? actividad.hora.slice(0, 5) : ''
+    });
+  };
+
+  const handleCancelarEdicionAgenda = () => {
+    setAgendaEditandoId(null);
+    setAgendaForm({ tipo: 'reunion', descripcion: '', hora: '' });
+  };
+
+  const handleEliminarAgenda = async (id) => {
+    if (!confirm('¿Eliminar esta actividad?')) return;
+    try {
+      await api.delete(`${API_URL}/agenda/${id}`, { params: { usuario_id: usuario.id } });
+      toast.success('Actividad eliminada correctamente');
+      if (agendaEditandoId === id) handleCancelarEdicionAgenda();
+      cargarAgenda();
+    } catch (error) {
+      toast.error('Error al eliminar la actividad');
+      console.error(error);
+    }
   };
 
   // ===== FUNCIONES DE PDFs =====
@@ -3191,12 +3324,112 @@ function App() {
         </>
         )}
 
-        {vistaActiva === 'agenda' && (
-          <div style={styles.formCard}>
-            <h2 style={styles.sectionTitle}>Mi Agenda</h2>
-            <p style={styles.emptyText}>Próximamente: calendario de actividades (reuniones, consultas, seguimientos, informes).</p>
-          </div>
-        )}
+        {vistaActiva === 'agenda' && (() => {
+          const primerDiaSemana = new Date(agendaAnio, agendaMes, 1).getDay();
+          const diasEnMes = new Date(agendaAnio, agendaMes + 1, 0).getDate();
+          const celdas = [];
+          for (let i = 0; i < primerDiaSemana; i++) celdas.push(null);
+          for (let d = 1; d <= diasEnMes; d++) celdas.push(d);
+          const actividadesDia = actividadesDelDia(agendaDiaSeleccionado);
+
+          return (
+            <div style={styles.mainGrid}>
+              <div style={styles.formCard}>
+                <div style={styles.calendarNav}>
+                  <button type="button" onClick={irMesAnterior} style={styles.calendarNavButton}>← Anterior</button>
+                  <span style={styles.calendarMonthLabel}>{NOMBRES_MES[agendaMes]} {agendaAnio}</span>
+                  <button type="button" onClick={irMesSiguiente} style={styles.calendarNavButton}>Siguiente →</button>
+                </div>
+                <div style={styles.calendarGrid}>
+                  {NOMBRES_DIA_SEMANA.map(dia => (
+                    <div key={dia} style={styles.calendarWeekday}>{dia}</div>
+                  ))}
+                  {celdas.map((dia, idx) => {
+                    if (dia === null) return <div key={`vacio-${idx}`} />;
+                    const actividades = actividadesDelDia(dia);
+                    const seleccionado = dia === agendaDiaSeleccionado;
+                    return (
+                      <div
+                        key={dia}
+                        onClick={() => { setAgendaDiaSeleccionado(dia); handleCancelarEdicionAgenda(); }}
+                        style={seleccionado ? styles.calendarDayCellSelected : styles.calendarDayCell}
+                      >
+                        <span style={styles.calendarDayNumber}>{dia}</span>
+                        {actividades.slice(0, 2).map(a => (
+                          <span
+                            key={a.id}
+                            style={{ ...styles.calendarDot, background: COLORES_TIPO_AGENDA[a.tipo]?.bg, color: COLORES_TIPO_AGENDA[a.tipo]?.text }}
+                          >
+                            {ETIQUETAS_TIPO_AGENDA[a.tipo]}
+                          </span>
+                        ))}
+                        {actividades.length > 2 && (
+                          <span style={{ fontSize: '10px', color: muted }}>+{actividades.length - 2} más</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={styles.listCard}>
+                <div style={styles.cardHeader}>
+                  <h3 style={styles.cardTitle}>{agendaDiaSeleccionado} de {NOMBRES_MES[agendaMes]}</h3>
+                </div>
+                {actividadesDia.length === 0 ? (
+                  <p style={styles.emptyText}>No hay actividades este día</p>
+                ) : (
+                  <ul style={styles.patientList}>
+                    {actividadesDia.map(a => (
+                      <li key={a.id} style={styles.patientItem}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                          <div>
+                            <span
+                              style={{ ...styles.calendarDot, background: COLORES_TIPO_AGENDA[a.tipo]?.bg, color: COLORES_TIPO_AGENDA[a.tipo]?.text }}
+                            >
+                              {ETIQUETAS_TIPO_AGENDA[a.tipo]}
+                            </span>
+                            {a.hora && <span style={styles.patientInfo}>{a.hora.slice(0, 5)}</span>}
+                            {a.descripcion && <p style={{ margin: '4px 0 0', fontSize: '14px' }}>{a.descripcion}</p>}
+                          </div>
+                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                            <button onClick={() => handleEditarAgenda(a)} style={styles.editButton}>Editar</button>
+                            <button onClick={() => handleEliminarAgenda(a.id)} style={styles.deleteButton}>Eliminar</button>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <form
+                  onSubmit={handleGuardarAgenda}
+                  style={{ ...styles.cardForm, marginTop: '16px', paddingTop: '16px', borderTop: `1px solid ${borderLight}` }}
+                >
+                  <h4 style={{ margin: '0 0 8px', fontFamily: fontDisplay, fontWeight: 500 }}>
+                    {agendaEditandoId ? 'Editar actividad' : 'Nueva actividad'}
+                  </h4>
+                  <label style={styles.inlineLabel}>
+                    Tipo
+                    <select name="tipo" value={agendaForm.tipo} onChange={handleChangeAgenda} style={styles.cardInput}>
+                      {Object.entries(ETIQUETAS_TIPO_AGENDA).map(([valor, etiqueta]) => (
+                        <option key={valor} value={valor}>{etiqueta}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <input type="time" name="hora" value={agendaForm.hora} onChange={handleChangeAgenda} style={styles.cardInput} />
+                  <textarea name="descripcion" placeholder="Descripción" value={agendaForm.descripcion} onChange={handleChangeAgenda} rows="3" style={styles.cardInput} />
+                  <div style={styles.buttonRow}>
+                    {agendaEditandoId && (
+                      <button type="button" onClick={handleCancelarEdicionAgenda} style={styles.cancelButton}>Cancelar</button>
+                    )}
+                    <button type="submit" style={styles.saveButton}>{agendaEditandoId ? 'Guardar cambios' : 'Agregar actividad'}</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          );
+        })()}
 
         {vistaActiva === 'configuracion' && (
         <>
@@ -3856,6 +4089,13 @@ const pastelTeal = { bg: '#DFF3F0', text: '#1B6E63' };
 const pastelOrange = { bg: '#FCE7D2', text: '#9C5A16' };
 const pastelRed = { bg: dangerLight, text: danger };
 
+const COLORES_TIPO_AGENDA = {
+  reunion: pastelBlue,
+  consulta: pastelTeal,
+  seguimiento: pastelYellow,
+  informe: pastelPurple
+};
+
 const styles = {
   loginContainer: {
     display: 'flex',
@@ -4364,6 +4604,77 @@ const styles = {
     marginTop: '40px',
     paddingTop: '40px',
     borderTop: `1px solid ${borderLight}`,
+  },
+  calendarNav: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '16px',
+  },
+  calendarNavButton: {
+    background: 'transparent',
+    border: `1px solid ${border}`,
+    borderRadius: '4px',
+    padding: '6px 12px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    color: ink,
+    fontFamily: fontBody,
+  },
+  calendarMonthLabel: {
+    fontFamily: fontDisplay,
+    fontSize: '18px',
+    fontWeight: '500',
+    color: ink,
+  },
+  calendarGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, 1fr)',
+    gap: '4px',
+  },
+  calendarWeekday: {
+    textAlign: 'center',
+    fontSize: '12px',
+    color: muted,
+    fontFamily: fontBody,
+    padding: '4px 0',
+  },
+  calendarDayCell: {
+    minHeight: '64px',
+    border: `1px solid ${borderLight}`,
+    borderRadius: '4px',
+    padding: '4px',
+    cursor: 'pointer',
+    fontFamily: fontBody,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    background: '#fff',
+  },
+  calendarDayCellSelected: {
+    minHeight: '64px',
+    border: `2px solid ${accent}`,
+    borderRadius: '4px',
+    padding: '4px',
+    cursor: 'pointer',
+    fontFamily: fontBody,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    background: accentLight,
+  },
+  calendarDayNumber: {
+    fontSize: '13px',
+    color: ink,
+    fontWeight: '500',
+  },
+  calendarDot: {
+    fontSize: '10px',
+    borderRadius: '3px',
+    padding: '1px 4px',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   modalOverlay: {
     position: 'fixed',

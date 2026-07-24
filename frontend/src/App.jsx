@@ -153,9 +153,20 @@ function App() {
   const [errorLogin, setErrorLogin] = useState('');
   const [mostrarLogin, setMostrarLogin] = useState(true);
   const [empresaLogin, setEmpresaLogin] = useState(null);
+  const [empresasPublicas, setEmpresasPublicas] = useState([]);
+  const [empresaSeleccionadaId, setEmpresaSeleccionadaId] = useState('');
+  const [mostrarOlvidoPassword, setMostrarOlvidoPassword] = useState(false);
+  const [olvidoUsuario, setOlvidoUsuario] = useState('');
+  const [olvidoEmpresaId, setOlvidoEmpresaId] = useState('');
+  const [olvidoMensaje, setOlvidoMensaje] = useState('');
+  const [resetPasswordToken, setResetPasswordToken] = useState(null);
+  const [resetPasswordNueva, setResetPasswordNueva] = useState('');
+  const [resetPasswordConfirmar, setResetPasswordConfirmar] = useState('');
+  const [resetPasswordMensaje, setResetPasswordMensaje] = useState('');
+  const [resetPasswordExito, setResetPasswordExito] = useState(false);
   const [mostrarRegistro, setMostrarRegistro] = useState(false);
   const [registroEnviado, setRegistroEnviado] = useState(false);
-  const [registroForm, setRegistroForm] = useState({ nombre: '', correo: '', celular: '', admin_num_empleado: '', admin_nombre: '', admin_password: '' });
+  const [registroForm, setRegistroForm] = useState({ nombre: '', correo: '', celular: '', admin_num_empleado: '', admin_nombre: '', admin_password: '', admin_correo: '' });
   const [registroLogo, setRegistroLogo] = useState(null);
   const [tasasCambio, setTasasCambio] = useState(null);
   const [pacientes, setPacientes] = useState([]);
@@ -181,7 +192,8 @@ function App() {
     num_empleado: '',
     nombre: '',
     rol: 'medico',
-    password: ''
+    password: '',
+    correo: ''
   });
   const [mensajeUsuario, setMensajeUsuario] = useState('');
 
@@ -190,7 +202,7 @@ function App() {
   const [usuariosEmpresaExpandida, setUsuariosEmpresaExpandida] = useState([]);
   const [nuevaEmpresaNombre, setNuevaEmpresaNombre] = useState('');
   const [nuevaEmpresaLogo, setNuevaEmpresaLogo] = useState(null);
-  const [nuevaEmpresaAdmin, setNuevaEmpresaAdmin] = useState({ num_empleado: '', nombre: '', password: '' });
+  const [nuevaEmpresaAdmin, setNuevaEmpresaAdmin] = useState({ num_empleado: '', nombre: '', password: '', correo: '' });
   const [soporteReset, setSoporteReset] = useState({ num_empleado: '', password: '' });
   const [vistaActiva, setVistaActiva] = useState('consultas');
   const [miEmpresaNombre, setMiEmpresaNombre] = useState('');
@@ -342,6 +354,25 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Si la URL es /reset-password/:token, muestra la pantalla para elegir
+  // una nueva contraseña en vez del login normal.
+  useEffect(() => {
+    const match = window.location.pathname.match(/^\/reset-password\/([a-zA-Z0-9]+)$/);
+    if (!match) return;
+    setResetPasswordToken(match[1]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Lista de empresas activas para el selector del login genérico (solo
+  // aplica cuando no venimos de un link /login/:slug, que ya trae su
+  // propia empresa implícita).
+  useEffect(() => {
+    axios.get(`${API_URL}/empresas/publicas`)
+      .then((response) => setEmpresasPublicas(response.data))
+      .catch(() => setEmpresasPublicas([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Tipo de cambio en vivo para mostrar los planes en COP/USD además de
   // MXN. Si la API externa falla, se usa un aproximado como respaldo.
   useEffect(() => {
@@ -399,7 +430,8 @@ function App() {
     try {
       const response = await api.post(`${API_URL}/login`, {
         num_empleado: numEmpleado,
-        password: password
+        password: password,
+        empresa_id: empresaLogin?.id || empresaSeleccionadaId || undefined
       });
       if (response.data.success) {
         setUsuario(response.data.user);
@@ -416,6 +448,37 @@ function App() {
     }
   };
 
+  const handleOlvidoPassword = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API_URL}/forgot-password`, {
+        empresa_id: empresaLogin?.id || olvidoEmpresaId,
+        num_empleado: olvidoUsuario
+      });
+      setOlvidoMensaje('Si el usuario existe, se envió un correo con instrucciones.');
+    } catch (error) {
+      setOlvidoMensaje(error.response?.data?.error || 'Error al procesar la solicitud');
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setResetPasswordMensaje('');
+    if (resetPasswordNueva !== resetPasswordConfirmar) {
+      setResetPasswordMensaje('Las contraseñas no coinciden');
+      return;
+    }
+    try {
+      await axios.post(`${API_URL}/reset-password`, {
+        token: resetPasswordToken,
+        nueva_password: resetPasswordNueva
+      });
+      setResetPasswordExito(true);
+    } catch (error) {
+      setResetPasswordMensaje(error.response?.data?.error || 'Error al restablecer la contraseña');
+    }
+  };
+
   const handleSolicitarRegistro = async (e) => {
     e.preventDefault();
     try {
@@ -426,6 +489,7 @@ function App() {
       data.append('admin_num_empleado', registroForm.admin_num_empleado);
       data.append('admin_nombre', registroForm.admin_nombre);
       data.append('admin_password', registroForm.admin_password);
+      data.append('admin_correo', registroForm.admin_correo);
       if (registroLogo) data.append('logo', registroLogo);
       await axios.post(`${API_URL}/empresas/solicitar-registro`, data);
       setRegistroEnviado(true);
@@ -587,7 +651,8 @@ function App() {
         num_empleado: '',
         nombre: '',
         rol: 'medico',
-        password: ''
+        password: '',
+        correo: ''
       });
       cargarUsuarios();
     } catch (error) {
@@ -655,12 +720,13 @@ function App() {
       data.append('admin_num_empleado', nuevaEmpresaAdmin.num_empleado);
       data.append('admin_nombre', nuevaEmpresaAdmin.nombre);
       data.append('admin_password', nuevaEmpresaAdmin.password);
+      data.append('admin_correo', nuevaEmpresaAdmin.correo);
       if (nuevaEmpresaLogo) data.append('logo', nuevaEmpresaLogo);
       await api.post(`${API_URL}/empresas`, data);
       toast.success('Empresa y administrador creados correctamente');
       setNuevaEmpresaNombre('');
       setNuevaEmpresaLogo(null);
-      setNuevaEmpresaAdmin({ num_empleado: '', nombre: '', password: '' });
+      setNuevaEmpresaAdmin({ num_empleado: '', nombre: '', password: '', correo: '' });
       cargarEmpresas();
     } catch (error) {
       toast.error(`${error.response?.data?.error || 'Error al crear empresa'}`);
@@ -2307,10 +2373,36 @@ function App() {
   };
 
   // ===== PANTALLA DE LOGIN =====
+  if (resetPasswordToken) {
+    return (
+      <div style={styles.loginContainer}>
+        <div style={styles.loginBox}>
+          <h1 style={styles.title}>WH MANAGEMENT</h1>
+          <p style={styles.welcomeText}>Elige tu nueva contraseña</p>
+          {resetPasswordExito ? (
+            <div style={styles.mensajeBox}>
+              <p>Contraseña actualizada correctamente.</p>
+              <a href="/">Volver a iniciar sesión</a>
+            </div>
+          ) : (
+            <form onSubmit={handleResetPassword}>
+              {resetPasswordMensaje && (
+                <div style={styles.errorBox}>{resetPasswordMensaje}</div>
+              )}
+              <input type="password" placeholder="Nueva contraseña" value={resetPasswordNueva} onChange={(e) => setResetPasswordNueva(e.target.value)} style={styles.input} required />
+              <input type="password" placeholder="Confirmar contraseña" value={resetPasswordConfirmar} onChange={(e) => setResetPasswordConfirmar(e.target.value)} style={styles.input} required />
+              <button type="submit" style={styles.loginButton}>Restablecer contraseña</button>
+            </form>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (mostrarLogin) {
     return (
       <>
-        <Toaster 
+        <Toaster
           position="top-right"
           toastOptions={{
             duration: 4000,
@@ -2371,10 +2463,43 @@ function App() {
                   <div style={styles.errorBox}>{errorLogin}</div>
                 )}
                 <form onSubmit={handleLogin}>
-                  <input type="text" placeholder="Número de empleado" value={numEmpleado} onChange={(e) => setNumEmpleado(e.target.value)} style={styles.input} required />
+                  {!empresaLogin && (
+                    <select value={empresaSeleccionadaId} onChange={(e) => setEmpresaSeleccionadaId(e.target.value)} style={styles.input} required>
+                      <option value="">Selecciona tu empresa</option>
+                      {empresasPublicas.map((e) => (
+                        <option key={e.id} value={e.id}>{e.nombre}</option>
+                      ))}
+                    </select>
+                  )}
+                  <input type="text" placeholder="Usuario" value={numEmpleado} onChange={(e) => setNumEmpleado(e.target.value)} style={styles.input} required />
                   <input type="password" placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)} style={styles.input} required />
                   <button type="submit" style={styles.loginButton}>Iniciar Sesión</button>
                 </form>
+                <p style={styles.welcomeText}>
+                  <a href="#" onClick={(e) => { e.preventDefault(); setMostrarOlvidoPassword(!mostrarOlvidoPassword); setOlvidoMensaje(''); }}>
+                    ¿Olvidaste tu contraseña?
+                  </a>
+                </p>
+                {mostrarOlvidoPassword && (
+                  <div>
+                    {olvidoMensaje ? (
+                      <p style={styles.welcomeText}>{olvidoMensaje}</p>
+                    ) : (
+                      <form onSubmit={handleOlvidoPassword}>
+                        {!empresaLogin && (
+                          <select value={olvidoEmpresaId} onChange={(e) => setOlvidoEmpresaId(e.target.value)} style={styles.input} required>
+                            <option value="">Selecciona tu empresa</option>
+                            {empresasPublicas.map((e) => (
+                              <option key={e.id} value={e.id}>{e.nombre}</option>
+                            ))}
+                          </select>
+                        )}
+                        <input type="text" placeholder="Usuario" value={olvidoUsuario} onChange={(e) => setOlvidoUsuario(e.target.value)} style={styles.input} required />
+                        <button type="submit" style={styles.loginButton}>Enviar instrucciones por correo</button>
+                      </form>
+                    )}
+                  </div>
+                )}
                 <div style={styles.testCredentials}>
                   <p>‍Usuarios de prueba:</p>
                   <p><strong>Admin:</strong> ADMIN001 / admin123</p>
@@ -2471,6 +2596,14 @@ function App() {
                     placeholder="Usuario * (ej. viviana.buitrago)"
                     value={registroForm.admin_num_empleado}
                     onChange={(e) => setRegistroForm({ ...registroForm, admin_num_empleado: e.target.value })}
+                    style={styles.input}
+                    required
+                  />
+                  <input
+                    type="email"
+                    placeholder="Tu correo *"
+                    value={registroForm.admin_correo}
+                    onChange={(e) => setRegistroForm({ ...registroForm, admin_correo: e.target.value })}
                     style={styles.input}
                     required
                   />
@@ -3552,6 +3685,7 @@ function App() {
                     </select>
                   </label>
                   <input name="password" type="password" placeholder="Contraseña *" value={nuevoUsuario.password} onChange={handleCambioUsuario} style={styles.cardInput} required />
+                  <input name="correo" type="email" placeholder="Correo" value={nuevoUsuario.correo} onChange={handleCambioUsuario} style={styles.cardInput} />
                   <button type="submit" style={styles.createButton}>Crear Usuario</button>
                 </form>
               </div>
@@ -3709,6 +3843,13 @@ function App() {
                     onChange={(e) => setNuevaEmpresaAdmin({ ...nuevaEmpresaAdmin, password: e.target.value })}
                     style={styles.cardInput}
                     required
+                  />
+                  <input
+                    type="email"
+                    placeholder="Correo"
+                    value={nuevaEmpresaAdmin.correo}
+                    onChange={(e) => setNuevaEmpresaAdmin({ ...nuevaEmpresaAdmin, correo: e.target.value })}
+                    style={styles.cardInput}
                   />
                   <button type="submit" style={styles.createButton}>Crear Empresa</button>
                 </form>

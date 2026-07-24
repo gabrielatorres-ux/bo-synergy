@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const crypto = require('crypto');
 const { query, queryOne, queryRun, supabase } = require('./database');
 const { enviarCorreo, enviarCorreoSimple } = require('./emailService');
 
@@ -66,7 +67,7 @@ app.get('/api/empresas', async (req, res) => {
 app.get('/api/empresas/by-slug/:slug', async (req, res) => {
   try {
     const empresa = await queryOne(
-      'SELECT nombre, logo_url FROM empresas WHERE slug = $1 AND activo = true',
+      'SELECT id, nombre, logo_url FROM empresas WHERE slug = $1 AND activo = true',
       [req.params.slug]
     );
     if (!empresa) {
@@ -78,11 +79,23 @@ app.get('/api/empresas/by-slug/:slug', async (req, res) => {
   }
 });
 
+// Pública: lista de empresas activas para el selector del login genérico.
+app.get('/api/empresas/publicas', async (req, res) => {
+  try {
+    const empresas = await query(
+      'SELECT id, nombre, slug, logo_url FROM empresas WHERE activo = true ORDER BY nombre'
+    );
+    res.json(empresas.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Crea la empresa junto con su primer usuario admin (sin esto no habría
 // forma de entrar a una empresa nueva: nadie de ahí existiría todavía
 // para crear a los demás usuarios). `activo=false` se usa para el
 // auto-registro público, que queda pendiente de aprobación.
-const crearEmpresaConAdmin = async ({ nombre, correo, celular, file, adminNumEmpleado, adminNombre, adminPassword, activo }) => {
+const crearEmpresaConAdmin = async ({ nombre, correo, celular, file, adminNumEmpleado, adminNombre, adminPassword, adminCorreo, activo }) => {
   const logoUrl = file ? await subirLogo(file) : null;
   const slug = await generarSlugUnico(nombre);
   const result = await queryRun(
@@ -91,15 +104,15 @@ const crearEmpresaConAdmin = async ({ nombre, correo, celular, file, adminNumEmp
   );
   const empresaId = result.rows[0].id;
   await queryRun(
-    `INSERT INTO usuarios (num_empleado, nombre, rol, password, empresa_id, fecha_registro)
-     VALUES ($1, $2, 'admin', $3, $4, NOW())`,
-    [adminNumEmpleado, adminNombre, adminPassword, empresaId]
+    `INSERT INTO usuarios (num_empleado, nombre, rol, password, empresa_id, correo, fecha_registro)
+     VALUES ($1, $2, 'admin', $3, $4, $5, NOW())`,
+    [adminNumEmpleado, adminNombre, adminPassword, empresaId, adminCorreo || null]
   );
   return { empresaId, slug };
 };
 
 app.post('/api/empresas', upload.single('logo'), async (req, res) => {
-  const { nombre, correo, celular, admin_num_empleado, admin_nombre, admin_password } = req.body;
+  const { nombre, correo, celular, admin_num_empleado, admin_nombre, admin_password, admin_correo } = req.body;
   if (!nombre) {
     return res.status(400).json({ error: 'El nombre es requerido' });
   }
@@ -115,6 +128,7 @@ app.post('/api/empresas', upload.single('logo'), async (req, res) => {
       adminNumEmpleado: admin_num_empleado,
       adminNombre: admin_nombre,
       adminPassword: admin_password,
+      adminCorreo: admin_correo,
       activo: true
     });
     res.json({ id: empresaId, slug, message: 'Empresa creada correctamente' });
@@ -129,7 +143,7 @@ app.post('/api/empresas', upload.single('logo'), async (req, res) => {
 // Pública: una empresa se auto-registra pero queda inactiva hasta que el
 // superadmin la apruebe desde "Gestión de Empresas".
 app.post('/api/empresas/solicitar-registro', upload.single('logo'), async (req, res) => {
-  const { nombre, correo, celular, admin_num_empleado, admin_nombre, admin_password } = req.body;
+  const { nombre, correo, celular, admin_num_empleado, admin_nombre, admin_password, admin_correo } = req.body;
   if (!nombre || !correo || !celular || !admin_num_empleado || !admin_nombre || !admin_password) {
     return res.status(400).json({ error: 'Todos los campos son requeridos' });
   }
@@ -142,6 +156,7 @@ app.post('/api/empresas/solicitar-registro', upload.single('logo'), async (req, 
       adminNumEmpleado: admin_num_empleado,
       adminNombre: admin_nombre,
       adminPassword: admin_password,
+      adminCorreo: admin_correo,
       activo: false
     });
     res.json({ message: 'Tu solicitud fue enviada. Te avisaremos cuando tu cuenta esté aprobada.' });
@@ -917,19 +932,25 @@ app.get('/api/trabajos_alto_riesgo', async (req, res) => {
 // ==================== RUTAS DE AUTENTICACIÓN ====================
 
 app.post('/api/login', async (req, res) => {
-  const { num_empleado, password } = req.body;
+  const { num_empleado, password, empresa_id } = req.body;
 
   if (!num_empleado || !password) {
     return res.status(400).json({ error: 'Faltan datos' });
   }
 
   try {
+    const params = [num_empleado, password];
+    let whereEmpresa = '';
+    if (empresa_id) {
+      params.push(empresa_id);
+      whereEmpresa = ' AND u.empresa_id = $3';
+    }
     const result = await queryOne(
       `SELECT u.*, e.nombre as empresa_nombre, e.logo_url as empresa_logo_url, e.slug as empresa_slug, e.activo as empresa_activa
        FROM usuarios u
        JOIN empresas e ON u.empresa_id = e.id
-       WHERE u.num_empleado = $1 AND u.password = $2`,
-      [num_empleado, password]
+       WHERE u.num_empleado = $1 AND u.password = $2${whereEmpresa}`,
+      params
     );
     if (!result) {
       return res.status(401).json({ error: 'Credenciales incorrectas' });
@@ -950,6 +971,63 @@ app.post('/api/login', async (req, res) => {
       user: userWithoutPassword,
       message: `Bienvenido ${result.nombre}`
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Solicita el restablecimiento de contraseña por correo. Responde siempre
+// el mismo mensaje genérico exista o no la cuenta, para no filtrar qué
+// usuarios existen en el sistema.
+app.post('/api/forgot-password', async (req, res) => {
+  const { empresa_id, num_empleado } = req.body;
+  const mensajeGenerico = 'Si el usuario existe, se envió un correo con instrucciones';
+  if (!empresa_id || !num_empleado) {
+    return res.status(400).json({ error: 'Faltan datos' });
+  }
+  try {
+    const usuario = await queryOne(
+      'SELECT id, nombre, correo FROM usuarios WHERE num_empleado = $1 AND empresa_id = $2',
+      [num_empleado, empresa_id]
+    );
+    if (usuario && usuario.correo) {
+      const token = crypto.randomBytes(32).toString('hex');
+      await queryRun(
+        `UPDATE usuarios SET reset_token = $1, reset_token_expira = NOW() + interval '1 hour' WHERE id = $2`,
+        [token, usuario.id]
+      );
+      const frontendUrl = process.env.FRONTEND_URL || 'https://bo-synergy.vercel.app';
+      const link = `${frontendUrl}/reset-password/${token}`;
+      enviarCorreoSimple(
+        usuario.correo,
+        'Restablecer contraseña',
+        `Hola ${usuario.nombre}, para restablecer tu contraseña entra a este enlace (válido por 1 hora): ${link}`
+      ).catch((error) => console.error('Error al enviar correo de restablecimiento:', error.message));
+    }
+    res.json({ message: mensajeGenerico });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/reset-password', async (req, res) => {
+  const { token, nueva_password } = req.body;
+  if (!token || !nueva_password) {
+    return res.status(400).json({ error: 'Faltan datos' });
+  }
+  try {
+    const usuario = await queryOne(
+      'SELECT id FROM usuarios WHERE reset_token = $1 AND reset_token_expira > NOW()',
+      [token]
+    );
+    if (!usuario) {
+      return res.status(400).json({ error: 'El enlace no es válido o ya expiró.' });
+    }
+    await queryRun(
+      'UPDATE usuarios SET password = $1, reset_token = NULL, reset_token_expira = NULL WHERE id = $2',
+      [nueva_password, usuario.id]
+    );
+    res.json({ message: 'Contraseña actualizada correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -989,7 +1067,7 @@ app.get('/api/asistencias', async (req, res) => {
 });
 
 app.post('/api/usuarios', async (req, res) => {
-  const { num_empleado, nombre, rol, password, empresa_id } = req.body;
+  const { num_empleado, nombre, rol, password, empresa_id, correo } = req.body;
 
   if (!num_empleado || !nombre || !rol || !password) {
     return res.status(400).json({ error: 'Todos los campos son requeridos' });
@@ -997,9 +1075,9 @@ app.post('/api/usuarios', async (req, res) => {
 
   try {
     const result = await queryRun(
-      `INSERT INTO usuarios (num_empleado, nombre, rol, password, empresa_id, fecha_registro)
-       VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING id`,
-      [num_empleado, nombre, rol, password, empresa_id]
+      `INSERT INTO usuarios (num_empleado, nombre, rol, password, empresa_id, correo, fecha_registro)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING id`,
+      [num_empleado, nombre, rol, password, empresa_id, correo || null]
     );
     res.json({ id: result.rows[0]?.id, message: 'Usuario creado correctamente' });
   } catch (error) {

@@ -153,11 +153,8 @@ function App() {
   const [errorLogin, setErrorLogin] = useState('');
   const [mostrarLogin, setMostrarLogin] = useState(true);
   const [empresaLogin, setEmpresaLogin] = useState(null);
-  const [empresasPublicas, setEmpresasPublicas] = useState([]);
-  const [empresaSeleccionadaId, setEmpresaSeleccionadaId] = useState('');
   const [mostrarOlvidoPassword, setMostrarOlvidoPassword] = useState(false);
   const [olvidoUsuario, setOlvidoUsuario] = useState('');
-  const [olvidoEmpresaId, setOlvidoEmpresaId] = useState('');
   const [olvidoMensaje, setOlvidoMensaje] = useState('');
   const [resetPasswordToken, setResetPasswordToken] = useState(null);
   const [resetPasswordNueva, setResetPasswordNueva] = useState('');
@@ -363,16 +360,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Lista de empresas activas para el selector del login genérico (solo
-  // aplica cuando no venimos de un link /login/:slug, que ya trae su
-  // propia empresa implícita).
-  useEffect(() => {
-    axios.get(`${API_URL}/empresas/publicas`)
-      .then((response) => setEmpresasPublicas(response.data))
-      .catch(() => setEmpresasPublicas([]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Tipo de cambio en vivo para mostrar los planes en COP/USD además de
   // MXN. Si la API externa falla, se usa un aproximado como respaldo.
   useEffect(() => {
@@ -431,7 +418,7 @@ function App() {
       const response = await api.post(`${API_URL}/login`, {
         num_empleado: numEmpleado,
         password: password,
-        empresa_id: empresaLogin?.id || empresaSeleccionadaId || undefined
+        empresa_id: empresaLogin?.id || undefined
       });
       if (response.data.success) {
         setUsuario(response.data.user);
@@ -452,7 +439,7 @@ function App() {
     e.preventDefault();
     try {
       await axios.post(`${API_URL}/forgot-password`, {
-        empresa_id: empresaLogin?.id || olvidoEmpresaId,
+        empresa_id: empresaLogin?.id || undefined,
         num_empleado: olvidoUsuario
       });
       setOlvidoMensaje('Si el usuario existe, se envió un correo con instrucciones.');
@@ -2463,14 +2450,6 @@ function App() {
                   <div style={styles.errorBox}>{errorLogin}</div>
                 )}
                 <form onSubmit={handleLogin}>
-                  {!empresaLogin && (
-                    <select value={empresaSeleccionadaId} onChange={(e) => setEmpresaSeleccionadaId(e.target.value)} style={styles.input} required>
-                      <option value="">Selecciona tu empresa</option>
-                      {empresasPublicas.map((e) => (
-                        <option key={e.id} value={e.id}>{e.nombre}</option>
-                      ))}
-                    </select>
-                  )}
                   <input type="text" placeholder="Usuario" value={numEmpleado} onChange={(e) => setNumEmpleado(e.target.value)} style={styles.input} required />
                   <input type="password" placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)} style={styles.input} required />
                   <button type="submit" style={styles.loginButton}>Iniciar Sesión</button>
@@ -2486,14 +2465,6 @@ function App() {
                       <p style={styles.welcomeText}>{olvidoMensaje}</p>
                     ) : (
                       <form onSubmit={handleOlvidoPassword}>
-                        {!empresaLogin && (
-                          <select value={olvidoEmpresaId} onChange={(e) => setOlvidoEmpresaId(e.target.value)} style={styles.input} required>
-                            <option value="">Selecciona tu empresa</option>
-                            {empresasPublicas.map((e) => (
-                              <option key={e.id} value={e.id}>{e.nombre}</option>
-                            ))}
-                          </select>
-                        )}
                         <input type="text" placeholder="Usuario" value={olvidoUsuario} onChange={(e) => setOlvidoUsuario(e.target.value)} style={styles.input} required />
                         <button type="submit" style={styles.loginButton}>Enviar instrucciones por correo</button>
                       </form>

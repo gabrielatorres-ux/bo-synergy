@@ -79,18 +79,6 @@ app.get('/api/empresas/by-slug/:slug', async (req, res) => {
   }
 });
 
-// Pública: lista de empresas activas para el selector del login genérico.
-app.get('/api/empresas/publicas', async (req, res) => {
-  try {
-    const empresas = await query(
-      'SELECT id, nombre, slug, logo_url FROM empresas WHERE activo = true ORDER BY nombre'
-    );
-    res.json(empresas.rows);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // Crea la empresa junto con su primer usuario admin (sin esto no habría
 // forma de entrar a una empresa nueva: nadie de ahí existiría todavía
 // para crear a los demás usuarios). `activo=false` se usa para el
@@ -982,13 +970,19 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/forgot-password', async (req, res) => {
   const { empresa_id, num_empleado } = req.body;
   const mensajeGenerico = 'Si el usuario existe, se envió un correo con instrucciones';
-  if (!empresa_id || !num_empleado) {
+  if (!num_empleado) {
     return res.status(400).json({ error: 'Faltan datos' });
   }
   try {
+    const params = [num_empleado];
+    let whereEmpresa = '';
+    if (empresa_id) {
+      params.push(empresa_id);
+      whereEmpresa = ' AND empresa_id = $2';
+    }
     const usuario = await queryOne(
-      'SELECT id, nombre, correo FROM usuarios WHERE num_empleado = $1 AND empresa_id = $2',
-      [num_empleado, empresa_id]
+      `SELECT id, nombre, correo FROM usuarios WHERE num_empleado = $1${whereEmpresa}`,
+      params
     );
     if (usuario && usuario.correo) {
       const token = crypto.randomBytes(32).toString('hex');

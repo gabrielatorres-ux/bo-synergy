@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const { query, queryOne, queryRun, supabase } = require('./database');
 const { enviarCorreo, enviarCorreoSimple } = require('./emailService');
 
@@ -91,10 +92,11 @@ const crearEmpresaConAdmin = async ({ nombre, correo, celular, file, adminNumEmp
     [nombre, logoUrl, slug, activo, correo || null, celular || null]
   );
   const empresaId = result.rows[0].id;
+  const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
   await queryRun(
     `INSERT INTO usuarios (num_empleado, nombre, rol, password, empresa_id, correo, fecha_registro)
      VALUES ($1, $2, 'admin', $3, $4, $5, NOW())`,
-    [adminNumEmpleado, adminNombre, adminPassword, empresaId, adminCorreo || null]
+    [adminNumEmpleado, adminNombre, adminPasswordHash, empresaId, adminCorreo || null]
   );
   return { empresaId, slug };
 };
@@ -927,20 +929,20 @@ app.post('/api/login', async (req, res) => {
   }
 
   try {
-    const params = [num_empleado, password];
+    const params = [num_empleado];
     let whereEmpresa = '';
     if (empresa_id) {
       params.push(empresa_id);
-      whereEmpresa = ' AND u.empresa_id = $3';
+      whereEmpresa = ' AND u.empresa_id = $2';
     }
     const result = await queryOne(
       `SELECT u.*, e.nombre as empresa_nombre, e.logo_url as empresa_logo_url, e.slug as empresa_slug, e.activo as empresa_activa
        FROM usuarios u
        JOIN empresas e ON u.empresa_id = e.id
-       WHERE u.num_empleado = $1 AND u.password = $2${whereEmpresa}`,
+       WHERE u.num_empleado = $1${whereEmpresa}`,
       params
     );
-    if (!result) {
+    if (!result || !(await bcrypt.compare(password, result.password))) {
       return res.status(401).json({ error: 'Credenciales incorrectas' });
     }
     if (!result.empresa_activa) {
@@ -1017,9 +1019,10 @@ app.post('/api/reset-password', async (req, res) => {
     if (!usuario) {
       return res.status(400).json({ error: 'El enlace no es válido o ya expiró.' });
     }
+    const passwordHash = await bcrypt.hash(nueva_password, 10);
     await queryRun(
       'UPDATE usuarios SET password = $1, reset_token = NULL, reset_token_expira = NULL WHERE id = $2',
-      [nueva_password, usuario.id]
+      [passwordHash, usuario.id]
     );
     res.json({ message: 'Contraseña actualizada correctamente' });
   } catch (error) {
@@ -1068,10 +1071,11 @@ app.post('/api/usuarios', async (req, res) => {
   }
 
   try {
+    const passwordHash = await bcrypt.hash(password, 10);
     const result = await queryRun(
       `INSERT INTO usuarios (num_empleado, nombre, rol, password, empresa_id, correo, fecha_registro)
        VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING id`,
-      [num_empleado, nombre, rol, password, empresa_id, correo || null]
+      [num_empleado, nombre, rol, passwordHash, empresa_id, correo || null]
     );
     res.json({ id: result.rows[0]?.id, message: 'Usuario creado correctamente' });
   } catch (error) {
@@ -1099,10 +1103,11 @@ app.post('/api/usuarios/importar', async (req, res) => {
       continue;
     }
     try {
+      const passwordHash = await bcrypt.hash(u.password, 10);
       await queryRun(
         `INSERT INTO usuarios (num_empleado, nombre, rol, password, empresa_id, fecha_registro)
          VALUES ($1, $2, $3, $4, $5, NOW())`,
-        [u.num_empleado, u.nombre, u.rol, u.password, empresa_id]
+        [u.num_empleado, u.nombre, u.rol, passwordHash, empresa_id]
       );
       insertados++;
     } catch (error) {
@@ -1140,7 +1145,8 @@ app.patch('/api/usuarios/:id/resetear-password', async (req, res) => {
   }
 
   try {
-    await queryRun('UPDATE usuarios SET password = $1 WHERE id = $2 AND empresa_id = $3', [nueva_password, id, empresa_id]);
+    const passwordHash = await bcrypt.hash(nueva_password, 10);
+    await queryRun('UPDATE usuarios SET password = $1 WHERE id = $2 AND empresa_id = $3', [passwordHash, id, empresa_id]);
     res.json({ message: 'Contraseña actualizada correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1159,7 +1165,8 @@ app.patch('/api/usuarios/resetear-password-admin', async (req, res) => {
   }
 
   try {
-    const result = await queryRun('UPDATE usuarios SET password = $1 WHERE num_empleado = $2 RETURNING id', [nueva_password, num_empleado]);
+    const passwordHash = await bcrypt.hash(nueva_password, 10);
+    const result = await queryRun('UPDATE usuarios SET password = $1 WHERE num_empleado = $2 RETURNING id', [passwordHash, num_empleado]);
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'No existe un usuario con ese número de empleado' });
     }

@@ -23,10 +23,14 @@ nada que ya funcione sin que te lo pidan explícitamente.
   `/reset-password/:token`). Componentes reutilizables aparte:
   `Dashboard.jsx`, `BuscadorPaciente.jsx`, `SelectorCIE10.jsx`.
 - **Backend**: Express, desplegado en Render. Todo en `backend/server.js`
-  (~1500 líneas), SQL crudo vía `pg` a través de los helpers
-  `query`/`queryOne`/`queryRun` en `backend/database.js`. Sin ORM.
+  (~1600 líneas). Dos pools de Postgres en `backend/database.js`: `pool`
+  (rol `postgres`, con `BYPASSRLS`, expuesto como `query`/`queryOne`/
+  `queryRun`) usado solo por las 5 rutas públicas, y `poolApp` (rol
+  restringido `app_backend`, sin `BYPASSRLS`) usado por todas las rutas
+  autenticadas vía `req.db.query`/`req.db.queryOne`/`req.db.queryRun` —
+  ver "Aislamiento a nivel de base de datos" abajo. Sin ORM.
 - **Base de datos**: Postgres en Supabase. Las migraciones viven en
-  `backend/migrations/` como archivos `.sql` numerados (`001` a `009`), y
+  `backend/migrations/` como archivos `.sql` numerados (`001` a `010`), y
   se aplican a mano contra producción con un script `node -e` de una sola
   vez — no hay un runner de migraciones. Antes de la convención numerada
   ya existían las tablas base (`pacientes`, `consultas`, `usuarios`)
@@ -66,18 +70,44 @@ completo:
 - Contraseñas siempre hasheadas con `bcryptjs` en cada punto de escritura
   (alta de usuario, importación Excel, alta de empresa, los 3 flujos de
   reset). Nunca guardar ni comparar contraseñas en texto plano.
-- **Pendiente/gap conocido**: el aislamiento multiempresa es solo de
-  aplicación, no de base de datos. El rol de Postgres que usa el backend
-  (`postgres`) tiene `rolbypassrls: true`, así que activar Row-Level
-  Security hoy no serviría de nada — haría falta migrar a un rol
-  restringido sin `BYPASSRLS` antes de que RLS sea una capa de defensa
-  real. Se decidió priorizar cerrar el hueco de autenticación (que era
-  explotable en producción) antes que esto.
 - El selector de empresa en el login genérico se probó y se **quitó**
   después: exponía la lista completa de clientes a cualquier visitante.
   El login genérico solo pide Usuario/Contraseña (el `num_empleado` es
   único globalmente, así que no hace falta pedir la empresa para que
   funcione). Los links `/login/:slug` conservan su branding implícito.
+
+### Aislamiento a nivel de base de datos (Row-Level Security)
+
+El aislamiento multiempresa ya no depende solo del código de la
+aplicación: Postgres lo aplica también. Esto importaba porque el rol
+`postgres` (usado antes para todo) tiene `rolbypassrls: true` — activar
+RLS con ese rol no habría protegido nada.
+
+- Rol `app_backend` (sin `BYPASSRLS`, sin ser dueño de las tablas), con
+  permisos acotados a las 16 tablas con datos de empresa. Sus
+  credenciales viven en `APP_DB_USER`/`APP_DB_PASSWORD` (mismo patrón que
+  `DB_USER`/`DB_PASSWORD`, pero con el rol restringido; el usuario tiene
+  el formato `app_backend.<project_ref>` por el pooler de Supabase).
+  Deben existir tanto en `backend/.env` local como en Render.
+- Las 16 tablas (`empresas`, `usuarios`, `asistencias`, `pacientes`,
+  `consultas`, `emi`, `emp`, `emr`, `vulnerabilidad`,
+  `bitacora_registros`, `incapacidades`, `seguimientos`,
+  `restricciones`, `accidentes`, `trabajos_alto_riesgo`,
+  `agenda_actividades`) tienen RLS activo (migración
+  `010_rls.sql`) con una política `FOR ALL` que compara `empresa_id` (o,
+  para las tablas que solo tienen `paciente_id` — consultas, EMI/EMP/EMR,
+  vulnerabilidad —, el `empresa_id` del paciente dueño vía subconsulta)
+  contra variables de sesión de Postgres, nunca contra lo que mande el
+  cliente. `agenda_actividades` además exige que coincida el usuario.
+- El middleware `withDbClient` en `server.js` toma una conexión de
+  `poolApp` por request, fija ahí `app.current_empresa_id`,
+  `app.is_superadmin` y `app.current_usuario_id` a partir del token ya
+  verificado, y expone `req.db` para que el handler la use. El
+  superadmin bypasea las políticas (`app.is_superadmin = 'true'`), igual
+  que a nivel de aplicación.
+- Esta capa es un respaldo si algún handler tuviera un bug de filtrado,
+  no el mecanismo principal — la autenticación por token sigue siendo la
+  primera línea de defensa (ver arriba).
 
 ### Módulos construidos (funcionando en producción)
 
@@ -110,7 +140,6 @@ completo:
   (visión, segmentos, métricas de éxito) ni una Fase 2 (arquitectura
   documentada, ERD) como entregables — el sistema se construyó módulo por
   módulo directamente en código.
-- **Row-Level Security** en Postgres (ver arriba).
 - **Módulos normativos dedicados**: NOM-019 (comisión de seguridad e
   higiene), NOM-030 (servicios de salud en el trabajo), NOM-035 (riesgo
   psicosocial), NOM-036 (riesgo ergonómico), NOM-017 (EPP), campañas
@@ -146,10 +175,11 @@ completo:
   una migración de datos correspondiente. Encadena migración → commit →
   push lo más rápido posible para minimizar la ventana de inconsistencia,
   y avisa al usuario antes de tocar datos reales de contraseñas/tokens.
-- **Variables de entorno nuevas** (como `JWT_SECRET`) no se pueden
-  configurar solas en Render — hay que pedirle al usuario que las agregue
-  en el dashboard de Render antes de que el código que las requiere se
-  despliegue, o el backend se cae.
+- **Variables de entorno nuevas** (como `JWT_SECRET` o
+  `APP_DB_USER`/`APP_DB_PASSWORD`) no se pueden configurar solas en
+  Render — hay que pedirle al usuario que las agregue en el dashboard de
+  Render antes de que el código que las requiere se despliegue, o el
+  backend se cae.
 - **No renombrar ni quitar campos existentes** sin confirmar: varios
   campos que parecen redundantes (como el `correo`/`celular` de empresa
   vs. el `correo` de cada usuario) son intencionales y ya tienen consumo
@@ -173,10 +203,10 @@ completo:
   validarse con el área legal antes de construirse.
 - **Datos sensibles y multiempresa**: CURP, RFC, NSS, diagnósticos y
   expedientes son datos sensibles bajo la LFPDPPP. El aislamiento entre
-  empresas debe ser estructural (ver el gap de RLS arriba), no solo una
-  convención de código. Documentos con valor legal (dictámenes,
-  incapacidades, recetas) deberían tener firma electrónica y trazabilidad
-  cuando se construya esa pieza.
+  empresas ya es estructural (autenticación por token + RLS en Postgres,
+  ver arriba), no solo una convención de código. Documentos con valor
+  legal (dictámenes, incapacidades, recetas) deberían tener firma
+  electrónica y trazabilidad cuando se construya esa pieza.
 - **Si algún día se construye el copiloto de IA**: toda sugerencia debe
   quedar visualmente marcada como sugerencia (nunca como hecho clínico
   validado), quedar registrada en una bitácora auditable de qué sugirió la

@@ -36,6 +36,32 @@ pool.on('error', (err) => {
   }
 })();
 
+// ==================== POOL RESTRINGIDO (RLS) ====================
+// Usa el rol app_backend, que NO tiene BYPASSRLS: es la conexión real que
+// aplica el aislamiento multiempresa a nivel de base de datos. Todas las
+// rutas autenticadas deben usar este pool (vía el middleware
+// withDbClient en server.js), nunca el pool de arriba, que sigue siendo
+// necesario solo para las rutas públicas (login, forgot-password,
+// reset-password, registro público, marca por slug).
+if (!process.env.APP_DB_USER || !process.env.APP_DB_PASSWORD) {
+  throw new Error('Faltan configurar APP_DB_USER y APP_DB_PASSWORD en las variables de entorno');
+}
+const poolApp = new Pool({
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT || 6543,
+  database: process.env.DB_NAME || 'postgres',
+  user: process.env.APP_DB_USER,
+  password: process.env.APP_DB_PASSWORD,
+  ssl: { rejectUnauthorized: false },
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+});
+
+poolApp.on('error', (err) => {
+  console.error('❌ Error inesperado en el pool restringido (app_backend):', err.message);
+});
+
 // ==================== HELPERS DE CONSULTA ====================
 
 // Para SELECTs que devuelven varias filas
@@ -61,4 +87,4 @@ if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
   supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 }
 
-module.exports = { query, queryOne, queryRun, supabase, pool };
+module.exports = { query, queryOne, queryRun, supabase, pool, poolApp };

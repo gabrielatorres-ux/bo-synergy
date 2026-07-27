@@ -4,7 +4,7 @@ const multer = require('multer');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { query, queryOne, queryRun, supabase } = require('./database');
+const { query, queryOne, queryRun, supabase, poolApp } = require('./database');
 const { enviarCorreo, enviarCorreoSimple } = require('./emailService');
 
 const app = express();
@@ -77,6 +77,44 @@ const scopeUsuarioId = (req, res, next) => {
     req.body.usuario_id = req.auth.id;
   }
   next();
+};
+
+// Segunda capa de aislamiento, esta vez en la propia base de datos: toma
+// una conexión dedicada del pool restringido (rol app_backend, sin
+// BYPASSRLS) y fija ahí las variables de sesión que leen las políticas
+// RLS (ver migración 010_rls.sql), siempre a partir del token ya
+// verificado — igual que scopeEmpresaId, nunca de lo que mande el
+// cliente. req.db reemplaza a query/queryOne/queryRun dentro de cada
+// ruta autenticada. La conexión se libera al terminar la respuesta.
+const withDbClient = async (req, res, next) => {
+  let liberado = false;
+  const liberar = (client) => {
+    if (liberado) return;
+    liberado = true;
+    client.release();
+  };
+  try {
+    const client = await poolApp.connect();
+    await client.query(
+      `SELECT set_config('app.current_empresa_id', $1, false),
+              set_config('app.is_superadmin', $2, false),
+              set_config('app.current_usuario_id', $3, false)`,
+      [String(req.auth.empresa_id), req.auth.es_superadmin ? 'true' : 'false', String(req.auth.id)]
+    );
+    req.db = {
+      query: (text, params) => client.query(text, params),
+      queryOne: async (text, params) => {
+        const result = await client.query(text, params);
+        return result.rows[0] || null;
+      },
+      queryRun: (text, params) => client.query(text, params),
+    };
+    res.on('finish', () => liberar(client));
+    res.on('close', () => liberar(client));
+    next();
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };
 
 // Para rutas identificadas por paciente_id (no por empresa_id directo):
@@ -156,9 +194,9 @@ const generarSlugUnico = async (nombre) => {
   return slug;
 };
 
-app.get('/api/empresas', requireAuth, requireSuperadmin, async (req, res) => {
+app.get('/api/empresas', requireAuth, withDbClient, requireSuperadmin, async (req, res) => {
   try {
-    const result = await query('SELECT * FROM empresas ORDER BY id');
+    const result = await req.db.query('SELECT * FROM empresas ORDER BY id');
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -186,16 +224,19 @@ app.get('/api/empresas/by-slug/:slug', async (req, res) => {
 // forma de entrar a una empresa nueva: nadie de ahí existiría todavía
 // para crear a los demás usuarios). `activo=false` se usa para el
 // auto-registro público, que queda pendiente de aprobación.
-const crearEmpresaConAdmin = async ({ nombre, correo, celular, file, adminNumEmpleado, adminNombre, adminPassword, adminCorreo, activo }) => {
+// queryRunFn: el registro público (sin token) usa el queryRun global; el
+// alta hecha por un superadmin autenticado usa req.db.queryRun (RLS), que
+// para un superadmin permite insertar en cualquier empresa.
+const crearEmpresaConAdmin = async ({ nombre, correo, celular, file, adminNumEmpleado, adminNombre, adminPassword, adminCorreo, activo, queryRunFn = queryRun }) => {
   const logoUrl = file ? await subirLogo(file) : null;
   const slug = await generarSlugUnico(nombre);
-  const result = await queryRun(
+  const result = await queryRunFn(
     'INSERT INTO empresas (nombre, logo_url, slug, activo, correo, celular) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
     [nombre, logoUrl, slug, activo, correo || null, celular || null]
   );
   const empresaId = result.rows[0].id;
   const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
-  await queryRun(
+  await queryRunFn(
     `INSERT INTO usuarios (num_empleado, nombre, rol, password, empresa_id, correo, fecha_registro)
      VALUES ($1, $2, 'admin', $3, $4, $5, NOW())`,
     [adminNumEmpleado, adminNombre, adminPasswordHash, empresaId, adminCorreo || null]
@@ -203,7 +244,7 @@ const crearEmpresaConAdmin = async ({ nombre, correo, celular, file, adminNumEmp
   return { empresaId, slug };
 };
 
-app.post('/api/empresas', requireAuth, requireSuperadmin, upload.single('logo'), async (req, res) => {
+app.post('/api/empresas', requireAuth, withDbClient, requireSuperadmin, upload.single('logo'), async (req, res) => {
   const { nombre, correo, celular, admin_num_empleado, admin_nombre, admin_password, admin_correo } = req.body;
   if (!nombre) {
     return res.status(400).json({ error: 'El nombre es requerido' });
@@ -221,7 +262,8 @@ app.post('/api/empresas', requireAuth, requireSuperadmin, upload.single('logo'),
       adminNombre: admin_nombre,
       adminPassword: admin_password,
       adminCorreo: admin_correo,
-      activo: true
+      activo: true,
+      queryRunFn: req.db.queryRun
     });
     res.json({ id: empresaId, slug, message: 'Empresa creada correctamente' });
   } catch (error) {
@@ -260,31 +302,31 @@ app.post('/api/empresas/solicitar-registro', upload.single('logo'), async (req, 
   }
 });
 
-app.patch('/api/empresas/:id/aprobar', requireAuth, requireSuperadmin, async (req, res) => {
+app.patch('/api/empresas/:id/aprobar', requireAuth, withDbClient, requireSuperadmin, async (req, res) => {
   try {
-    await queryRun('UPDATE empresas SET activo = true WHERE id = $1', [req.params.id]);
+    await req.db.queryRun('UPDATE empresas SET activo = true WHERE id = $1', [req.params.id]);
     res.json({ message: 'Empresa aprobada correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.delete('/api/empresas/:id', requireAuth, requireSuperadmin, async (req, res) => {
+app.delete('/api/empresas/:id', requireAuth, withDbClient, requireSuperadmin, async (req, res) => {
   const { id } = req.params;
   try {
-    const pacientesCount = await queryOne('SELECT COUNT(*) as total FROM pacientes WHERE empresa_id = $1', [id]);
+    const pacientesCount = await req.db.queryOne('SELECT COUNT(*) as total FROM pacientes WHERE empresa_id = $1', [id]);
     if (parseInt(pacientesCount.total) > 0) {
       return res.status(400).json({ error: 'No se puede eliminar una empresa con pacientes registrados' });
     }
-    await queryRun('DELETE FROM usuarios WHERE empresa_id = $1', [id]);
-    await queryRun('DELETE FROM empresas WHERE id = $1', [id]);
+    await req.db.queryRun('DELETE FROM usuarios WHERE empresa_id = $1', [id]);
+    await req.db.queryRun('DELETE FROM empresas WHERE id = $1', [id]);
     res.json({ message: 'Empresa eliminada correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.put('/api/empresas/:id', requireAuth, requireAdmin, upload.single('logo'), async (req, res) => {
+app.put('/api/empresas/:id', requireAuth, withDbClient, requireAdmin, upload.single('logo'), async (req, res) => {
   const { id } = req.params;
   const { nombre } = req.body;
   if (!req.auth.es_superadmin && Number(id) !== req.auth.empresa_id) {
@@ -293,9 +335,9 @@ app.put('/api/empresas/:id', requireAuth, requireAdmin, upload.single('logo'), a
   try {
     if (req.file) {
       const logoUrl = await subirLogo(req.file);
-      await queryRun('UPDATE empresas SET nombre = $1, logo_url = $2 WHERE id = $3', [nombre, logoUrl, id]);
+      await req.db.queryRun('UPDATE empresas SET nombre = $1, logo_url = $2 WHERE id = $3', [nombre, logoUrl, id]);
     } else {
-      await queryRun('UPDATE empresas SET nombre = $1 WHERE id = $2', [nombre, id]);
+      await req.db.queryRun('UPDATE empresas SET nombre = $1 WHERE id = $2', [nombre, id]);
     }
     res.json({ message: 'Empresa actualizada correctamente' });
   } catch (error) {
@@ -321,7 +363,7 @@ app.post('/api/adjuntos', requireAuth, upload.single('archivo'), async (req, res
 
 // ==================== RUTAS DE PACIENTES ====================
 
-app.get('/api/pacientes', requireAuth, scopeEmpresaId, async (req, res) => {
+app.get('/api/pacientes', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   try {
     const { search = '', page = 1, limit = 20, empresa_id } = req.query;
     const pageNum = Math.max(parseInt(page) || 1, 1);
@@ -329,14 +371,14 @@ app.get('/api/pacientes', requireAuth, scopeEmpresaId, async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
     const searchTerm = `%${search}%`;
 
-    const result = await query(
+    const result = await req.db.query(
       `SELECT * FROM pacientes
        WHERE empresa_id = $1 AND (nombre ILIKE $2 OR num_empleado ILIKE $2 OR area ILIKE $2 OR curp ILIKE $2 OR rfc ILIKE $2)
        ORDER BY id
        LIMIT $3 OFFSET $4`,
       [empresa_id, searchTerm, limitNum, offset]
     );
-    const totalResult = await queryOne(
+    const totalResult = await req.db.queryOne(
       `SELECT COUNT(*) as total FROM pacientes
        WHERE empresa_id = $1 AND (nombre ILIKE $2 OR num_empleado ILIKE $2 OR area ILIKE $2 OR curp ILIKE $2 OR rfc ILIKE $2)`,
       [empresa_id, searchTerm]
@@ -354,10 +396,10 @@ app.get('/api/pacientes', requireAuth, scopeEmpresaId, async (req, res) => {
   }
 });
 
-app.post('/api/pacientes', requireAuth, scopeEmpresaId, async (req, res) => {
+app.post('/api/pacientes', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle, curp, rfc } = req.body;
   try {
-    const result = await queryRun(
+    const result = await req.db.queryRun(
       `INSERT INTO pacientes (num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle, curp, rfc)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
       [num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle, curp || null, rfc || null]
@@ -373,7 +415,7 @@ app.post('/api/pacientes', requireAuth, scopeEmpresaId, async (req, res) => {
 
 // Alta masiva de pacientes desde un Excel (nombre, área, puesto, etc.) para
 // que una empresa no tenga que registrar empleados uno por uno.
-app.post('/api/pacientes/importar', requireAuth, scopeEmpresaId, async (req, res) => {
+app.post('/api/pacientes/importar', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   const { empresa_id, pacientes } = req.body;
   if (!empresa_id || !Array.isArray(pacientes) || pacientes.length === 0) {
     return res.status(400).json({ error: 'Se requiere una lista de pacientes' });
@@ -388,7 +430,7 @@ app.post('/api/pacientes/importar', requireAuth, scopeEmpresaId, async (req, res
       continue;
     }
     try {
-      await queryRun(
+      await req.db.queryRun(
         `INSERT INTO pacientes (num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle, curp, rfc)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
         [p.num_empleado || null, p.nombre, p.fecha_nac || null, p.nss || null, p.contacto_emergencia || null,
@@ -403,11 +445,11 @@ app.post('/api/pacientes/importar', requireAuth, scopeEmpresaId, async (req, res
   res.json({ insertados, errores });
 });
 
-app.put('/api/pacientes/:id', requireAuth, scopeEmpresaId, async (req, res) => {
+app.put('/api/pacientes/:id', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   const { id } = req.params;
   const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle, curp, rfc } = req.body;
   try {
-    await queryRun(
+    await req.db.queryRun(
       `UPDATE pacientes
        SET num_empleado = $1, nombre = $2, fecha_nac = $3, nss = $4, contacto_emergencia = $5, puesto = $6, area = $7, supervisor = $8, alergias = $9, alergias_detalle = $10, curp = $11, rfc = $12
        WHERE id = $13 AND empresa_id = $14`,
@@ -419,16 +461,16 @@ app.put('/api/pacientes/:id', requireAuth, scopeEmpresaId, async (req, res) => {
   }
 });
 
-app.delete('/api/pacientes/:id', requireAuth, scopeEmpresaId, async (req, res) => {
+app.delete('/api/pacientes/:id', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   const { id } = req.params;
   const { empresa_id } = req.query;
   try {
-    const paciente = await queryOne('SELECT id FROM pacientes WHERE id = $1 AND empresa_id = $2', [id, empresa_id]);
+    const paciente = await req.db.queryOne('SELECT id FROM pacientes WHERE id = $1 AND empresa_id = $2', [id, empresa_id]);
     if (!paciente) {
       return res.status(404).json({ error: 'Paciente no encontrado' });
     }
-    await queryRun('DELETE FROM consultas WHERE paciente_id = $1', [id]);
-    await queryRun('DELETE FROM pacientes WHERE id = $1 AND empresa_id = $2', [id, empresa_id]);
+    await req.db.queryRun('DELETE FROM consultas WHERE paciente_id = $1', [id]);
+    await req.db.queryRun('DELETE FROM pacientes WHERE id = $1 AND empresa_id = $2', [id, empresa_id]);
     res.json({ message: 'Paciente eliminado correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -437,25 +479,25 @@ app.delete('/api/pacientes/:id', requireAuth, scopeEmpresaId, async (req, res) =
 
 // ==================== RUTAS DE CONSULTAS ====================
 
-app.get('/api/consultas/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
+app.get('/api/consultas/:pacienteId', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
-    const result = await query('SELECT * FROM consultas WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
+    const result = await req.db.query('SELECT * FROM consultas WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.post('/api/consultas', requireAuth, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
-  const { 
+app.post('/api/consultas', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
+  const {
     paciente_id, fecha, motivo, alergias, alergias_detalle, cabeza, cuello, torax, abdomen, espalda,
     extremidades_superiores, extremidades_inferiores, ojos_oidos_garganta, causa,
-    impresion_diagnostica, medicamentos, receta, cie10 
+    impresion_diagnostica, medicamentos, receta, cie10
   } = req.body;
 
   try {
-    const result = await queryRun(
+    const result = await req.db.queryRun(
       `INSERT INTO consultas (
         paciente_id, fecha, motivo, alergias, alergias_detalle, cabeza, cuello, torax, abdomen, espalda,
         extremidades_superiores, extremidades_inferiores, ojos_oidos_garganta, causa,
@@ -471,16 +513,16 @@ app.post('/api/consultas', requireAuth, requirePacienteDeMiEmpresa((req) => req.
   }
 });
 
-app.put('/api/consultas/:id', requireAuth, requireConsultaDeMiEmpresa, async (req, res) => {
+app.put('/api/consultas/:id', requireAuth, withDbClient, requireConsultaDeMiEmpresa, async (req, res) => {
   const { id } = req.params;
-  const { 
+  const {
     fecha, motivo, alergias, alergias_detalle, cabeza, cuello, torax, abdomen, espalda,
     extremidades_superiores, extremidades_inferiores, ojos_oidos_garganta, causa,
-    impresion_diagnostica, medicamentos, receta, cie10 
+    impresion_diagnostica, medicamentos, receta, cie10
   } = req.body;
 
   try {
-    await queryRun(
+    await req.db.queryRun(
       `UPDATE consultas 
        SET fecha = $1, motivo = $2, alergias = $3, alergias_detalle = $4, cabeza = $5, cuello = $6, torax = $7, 
            abdomen = $8, espalda = $9, extremidades_superiores = $10, extremidades_inferiores = $11, 
@@ -497,10 +539,10 @@ app.put('/api/consultas/:id', requireAuth, requireConsultaDeMiEmpresa, async (re
   }
 });
 
-app.delete('/api/consultas/:id', requireAuth, requireConsultaDeMiEmpresa, async (req, res) => {
+app.delete('/api/consultas/:id', requireAuth, withDbClient, requireConsultaDeMiEmpresa, async (req, res) => {
   const { id } = req.params;
   try {
-    await queryRun('DELETE FROM consultas WHERE id = $1', [id]);
+    await req.db.queryRun('DELETE FROM consultas WHERE id = $1', [id]);
     res.json({ message: 'Consulta eliminada correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -509,7 +551,7 @@ app.delete('/api/consultas/:id', requireAuth, requireConsultaDeMiEmpresa, async 
 
 // ==================== RUTAS DE EXÁMENES ====================
 
-app.post('/api/emi', requireAuth, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
+app.post('/api/emi', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, fecha, exposicion_riesgos, trabajos_previos, riesgos_laborales,
     accidentes_previos, enfermedades_laborales, antecedentes_familiares,
     antecedentes_personales_no_patologicos, antecedentes_personales_patologicos,
@@ -517,7 +559,7 @@ app.post('/api/emi', requireAuth, requirePacienteDeMiEmpresa((req) => req.body.p
     exploracion_fisica, signos_vitales, agudeza_visual, alergia, embarazada } = req.body;
 
   try {
-    const result = await queryRun(
+    const result = await req.db.queryRun(
       `INSERT INTO emi (
         paciente_id, fecha, exposicion_riesgos, trabajos_previos, riesgos_laborales,
         accidentes_previos, enfermedades_laborales, antecedentes_familiares,
@@ -537,21 +579,21 @@ app.post('/api/emi', requireAuth, requirePacienteDeMiEmpresa((req) => req.body.p
   }
 });
 
-app.get('/api/emi/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
+app.get('/api/emi/:pacienteId', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
-    const result = await query('SELECT * FROM emi WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
+    const result = await req.db.query('SELECT * FROM emi WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/emi', requireAuth, scopeEmpresaId, async (req, res) => {
+app.get('/api/emi', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
-    const result = await query(
+    const result = await req.db.query(
       `SELECT e.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
        FROM emi e
        JOIN pacientes p ON p.id = e.paciente_id
@@ -566,7 +608,7 @@ app.get('/api/emi', requireAuth, scopeEmpresaId, async (req, res) => {
   }
 });
 
-app.post('/api/emp', requireAuth, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
+app.post('/api/emp', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, fecha, exposicion_auditiva, exposicion_respiratoria,
     exposicion_movimientos_repetitivos, exposicion_postural, exposicion_cargas_manuales,
     exposicion_visual, exposicion_psicosocial, exposicion_trabajos_alto_riesgo,
@@ -574,7 +616,7 @@ app.post('/api/emp', requireAuth, requirePacienteDeMiEmpresa((req) => req.body.p
     exploracion_fisica, signos_vitales, agudeza_visual, alergia, embarazada } = req.body;
 
   try {
-    const result = await queryRun(
+    const result = await req.db.queryRun(
       `INSERT INTO emp (
         paciente_id, fecha, exposicion_auditiva, exposicion_respiratoria,
         exposicion_movimientos_repetitivos, exposicion_postural, exposicion_cargas_manuales,
@@ -594,21 +636,21 @@ app.post('/api/emp', requireAuth, requirePacienteDeMiEmpresa((req) => req.body.p
   }
 });
 
-app.get('/api/emp/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
+app.get('/api/emp/:pacienteId', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
-    const result = await query('SELECT * FROM emp WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
+    const result = await req.db.query('SELECT * FROM emp WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/emp', requireAuth, scopeEmpresaId, async (req, res) => {
+app.get('/api/emp', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
-    const result = await query(
+    const result = await req.db.query(
       `SELECT e.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
        FROM emp e
        JOIN pacientes p ON p.id = e.paciente_id
@@ -623,7 +665,7 @@ app.get('/api/emp', requireAuth, scopeEmpresaId, async (req, res) => {
   }
 });
 
-app.post('/api/emr', requireAuth, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
+app.post('/api/emr', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, fecha, secuelas_auditiva, secuelas_respiratoria, secuelas_motriz,
     secuelas_pensamiento, secuelas_fuerza, secuelas_neurologica, secuelas_psicosocial,
     secuelas_visual, interrogatorio_aparatos, impresion_diagnostica,
@@ -631,7 +673,7 @@ app.post('/api/emr', requireAuth, requirePacienteDeMiEmpresa((req) => req.body.p
     alergia, embarazada } = req.body;
 
   try {
-    const result = await queryRun(
+    const result = await req.db.queryRun(
       `INSERT INTO emr (
         paciente_id, fecha, secuelas_auditiva, secuelas_respiratoria, secuelas_motriz,
         secuelas_pensamiento, secuelas_fuerza, secuelas_neurologica, secuelas_psicosocial,
@@ -651,21 +693,21 @@ app.post('/api/emr', requireAuth, requirePacienteDeMiEmpresa((req) => req.body.p
   }
 });
 
-app.get('/api/emr/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
+app.get('/api/emr/:pacienteId', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
-    const result = await query('SELECT * FROM emr WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
+    const result = await req.db.query('SELECT * FROM emr WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/emr', requireAuth, scopeEmpresaId, async (req, res) => {
+app.get('/api/emr', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
-    const result = await query(
+    const result = await req.db.query(
       `SELECT e.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
        FROM emr e
        JOIN pacientes p ON p.id = e.paciente_id
@@ -680,13 +722,13 @@ app.get('/api/emr', requireAuth, scopeEmpresaId, async (req, res) => {
   }
 });
 
-app.post('/api/vulnerabilidad', requireAuth, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
+app.post('/api/vulnerabilidad', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, fecha, tipo_vulnerabilidad, embarazo, cronico_degenerativa,
     hepato_renal, cardiologica, dermatologica, hematologica, impresion_diagnostica,
     cie10, exploracion_fisica, signos_vitales, agudeza_visual } = req.body;
 
   try {
-    const result = await queryRun(
+    const result = await req.db.queryRun(
       `INSERT INTO vulnerabilidad (
         paciente_id, fecha, tipo_vulnerabilidad, embarazo, cronico_degenerativa,
         hepato_renal, cardiologica, dermatologica, hematologica, impresion_diagnostica,
@@ -702,21 +744,21 @@ app.post('/api/vulnerabilidad', requireAuth, requirePacienteDeMiEmpresa((req) =>
   }
 });
 
-app.get('/api/vulnerabilidad/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
+app.get('/api/vulnerabilidad/:pacienteId', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
-    const result = await query('SELECT * FROM vulnerabilidad WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
+    const result = await req.db.query('SELECT * FROM vulnerabilidad WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/vulnerabilidad', requireAuth, scopeEmpresaId, async (req, res) => {
+app.get('/api/vulnerabilidad', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
-    const result = await query(
+    const result = await req.db.query(
       `SELECT v.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
        FROM vulnerabilidad v
        JOIN pacientes p ON p.id = v.paciente_id
@@ -733,10 +775,10 @@ app.get('/api/vulnerabilidad', requireAuth, scopeEmpresaId, async (req, res) => 
 
 // ==================== RUTAS DE BITÁCORA ====================
 
-app.post('/api/bitacora_registros', requireAuth, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
+app.post('/api/bitacora_registros', requireAuth, withDbClient, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, empresa_id, fecha, hora, alergias, embarazo, cie10, tratamiento, firma } = req.body;
   try {
-    const result = await queryRun(
+    const result = await req.db.queryRun(
       `INSERT INTO bitacora_registros (paciente_id, empresa_id, fecha, hora, alergias, embarazo, cie10, tratamiento, firma)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
       [paciente_id, empresa_id, fecha, hora, alergias, embarazo, cie10, tratamiento, firma]
@@ -747,10 +789,10 @@ app.post('/api/bitacora_registros', requireAuth, scopeEmpresaId, requirePaciente
   }
 });
 
-app.get('/api/bitacora_registros/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
+app.get('/api/bitacora_registros/:pacienteId', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
-    const result = await query(
+    const result = await req.db.query(
       'SELECT * FROM bitacora_registros WHERE paciente_id = $1 ORDER BY fecha DESC, hora DESC',
       [pacienteId]
     );
@@ -762,11 +804,11 @@ app.get('/api/bitacora_registros/:pacienteId', requireAuth, requirePacienteDeMiE
 
 // Log general de bitácora con filtro por fecha/hora/nombre/área, para la
 // vista de búsqueda (distinta de "listar por paciente" de arriba).
-app.get('/api/bitacora_registros', requireAuth, scopeEmpresaId, async (req, res) => {
+app.get('/api/bitacora_registros', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
-    const result = await query(
+    const result = await req.db.query(
       `SELECT b.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
        FROM bitacora_registros b
        JOIN pacientes p ON p.id = b.paciente_id
@@ -783,10 +825,10 @@ app.get('/api/bitacora_registros', requireAuth, scopeEmpresaId, async (req, res)
 
 // ==================== RUTAS DE INCAPACIDADES ====================
 
-app.post('/api/incapacidades', requireAuth, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
+app.post('/api/incapacidades', requireAuth, withDbClient, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, empresa_id, fecha, hora, tipo, descripcion, dias, manejo, adjunto_url } = req.body;
   try {
-    const result = await queryRun(
+    const result = await req.db.queryRun(
       `INSERT INTO incapacidades (paciente_id, empresa_id, fecha, hora, tipo, descripcion, dias, manejo, adjunto_url)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
       [paciente_id, empresa_id, fecha, hora, tipo, descripcion, dias, manejo, adjunto_url]
@@ -797,10 +839,10 @@ app.post('/api/incapacidades', requireAuth, scopeEmpresaId, requirePacienteDeMiE
   }
 });
 
-app.get('/api/incapacidades/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
+app.get('/api/incapacidades/:pacienteId', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
-    const result = await query(
+    const result = await req.db.query(
       'SELECT * FROM incapacidades WHERE paciente_id = $1 ORDER BY fecha DESC, hora DESC',
       [pacienteId]
     );
@@ -810,11 +852,11 @@ app.get('/api/incapacidades/:pacienteId', requireAuth, requirePacienteDeMiEmpres
   }
 });
 
-app.get('/api/incapacidades', requireAuth, scopeEmpresaId, async (req, res) => {
+app.get('/api/incapacidades', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
-    const result = await query(
+    const result = await req.db.query(
       `SELECT i.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
        FROM incapacidades i
        JOIN pacientes p ON p.id = i.paciente_id
@@ -831,10 +873,10 @@ app.get('/api/incapacidades', requireAuth, scopeEmpresaId, async (req, res) => {
 
 // ==================== RUTAS DE SEGUIMIENTOS ====================
 
-app.post('/api/seguimientos', requireAuth, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
+app.post('/api/seguimientos', requireAuth, withDbClient, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, empresa_id, fecha, hora, tipo, observacion, cie10, tratamiento } = req.body;
   try {
-    const result = await queryRun(
+    const result = await req.db.queryRun(
       `INSERT INTO seguimientos (paciente_id, empresa_id, fecha, hora, tipo, observacion, cie10, tratamiento)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
       [paciente_id, empresa_id, fecha, hora, tipo, observacion, cie10, tratamiento]
@@ -845,10 +887,10 @@ app.post('/api/seguimientos', requireAuth, scopeEmpresaId, requirePacienteDeMiEm
   }
 });
 
-app.get('/api/seguimientos/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
+app.get('/api/seguimientos/:pacienteId', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
-    const result = await query(
+    const result = await req.db.query(
       'SELECT * FROM seguimientos WHERE paciente_id = $1 ORDER BY fecha DESC, hora DESC',
       [pacienteId]
     );
@@ -858,11 +900,11 @@ app.get('/api/seguimientos/:pacienteId', requireAuth, requirePacienteDeMiEmpresa
   }
 });
 
-app.get('/api/seguimientos', requireAuth, scopeEmpresaId, async (req, res) => {
+app.get('/api/seguimientos', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
-    const result = await query(
+    const result = await req.db.query(
       `SELECT s.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
        FROM seguimientos s
        JOIN pacientes p ON p.id = s.paciente_id
@@ -879,10 +921,10 @@ app.get('/api/seguimientos', requireAuth, scopeEmpresaId, async (req, res) => {
 
 // ==================== RUTAS DE RESTRICCIONES ====================
 
-app.post('/api/restricciones', requireAuth, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
+app.post('/api/restricciones', requireAuth, withDbClient, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, empresa_id, fecha, hora, tipo, dias, descripcion } = req.body;
   try {
-    const result = await queryRun(
+    const result = await req.db.queryRun(
       `INSERT INTO restricciones (paciente_id, empresa_id, fecha, hora, tipo, dias, descripcion)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
       [paciente_id, empresa_id, fecha, hora, tipo, dias, descripcion]
@@ -893,10 +935,10 @@ app.post('/api/restricciones', requireAuth, scopeEmpresaId, requirePacienteDeMiE
   }
 });
 
-app.get('/api/restricciones/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
+app.get('/api/restricciones/:pacienteId', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
-    const result = await query(
+    const result = await req.db.query(
       'SELECT * FROM restricciones WHERE paciente_id = $1 ORDER BY fecha DESC, hora DESC',
       [pacienteId]
     );
@@ -906,11 +948,11 @@ app.get('/api/restricciones/:pacienteId', requireAuth, requirePacienteDeMiEmpres
   }
 });
 
-app.get('/api/restricciones', requireAuth, scopeEmpresaId, async (req, res) => {
+app.get('/api/restricciones', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
-    const result = await query(
+    const result = await req.db.query(
       `SELECT r.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
        FROM restricciones r
        JOIN pacientes p ON p.id = r.paciente_id
@@ -927,11 +969,11 @@ app.get('/api/restricciones', requireAuth, scopeEmpresaId, async (req, res) => {
 
 // ==================== RUTAS DE ACCIDENTES ====================
 
-app.post('/api/accidentes', requireAuth, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
+app.post('/api/accidentes', requireAuth, withDbClient, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, empresa_id, fecha, hora, hechos, exploracion_fisica, diagnostico,
     plan_accion, alcoholimetria, antidoping, adjunto_url } = req.body;
   try {
-    const result = await queryRun(
+    const result = await req.db.queryRun(
       `INSERT INTO accidentes (
         paciente_id, empresa_id, fecha, hora, hechos, exploracion_fisica, diagnostico,
         plan_accion, alcoholimetria, antidoping, adjunto_url
@@ -945,10 +987,10 @@ app.post('/api/accidentes', requireAuth, scopeEmpresaId, requirePacienteDeMiEmpr
   }
 });
 
-app.get('/api/accidentes/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
+app.get('/api/accidentes/:pacienteId', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
-    const result = await query(
+    const result = await req.db.query(
       'SELECT * FROM accidentes WHERE paciente_id = $1 ORDER BY fecha DESC, hora DESC',
       [pacienteId]
     );
@@ -958,11 +1000,11 @@ app.get('/api/accidentes/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((
   }
 });
 
-app.get('/api/accidentes', requireAuth, scopeEmpresaId, async (req, res) => {
+app.get('/api/accidentes', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
-    const result = await query(
+    const result = await req.db.query(
       `SELECT a.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
        FROM accidentes a
        JOIN pacientes p ON p.id = a.paciente_id
@@ -979,11 +1021,11 @@ app.get('/api/accidentes', requireAuth, scopeEmpresaId, async (req, res) => {
 
 // ==================== RUTAS DE TRABAJOS DE ALTO RIESGO ====================
 
-app.post('/api/trabajos_alto_riesgo', requireAuth, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
+app.post('/api/trabajos_alto_riesgo', requireAuth, withDbClient, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, empresa_id, fecha, hora, tipo_riesgo, agudeza_visual, tension_arterial,
     frecuencia_cardiaca, glucosa, prueba_equilibrio, alcoholimetria, antidoping, autorizada } = req.body;
   try {
-    const result = await queryRun(
+    const result = await req.db.queryRun(
       `INSERT INTO trabajos_alto_riesgo (
         paciente_id, empresa_id, fecha, hora, tipo_riesgo, agudeza_visual, tension_arterial,
         frecuencia_cardiaca, glucosa, prueba_equilibrio, alcoholimetria, antidoping, autorizada
@@ -997,10 +1039,10 @@ app.post('/api/trabajos_alto_riesgo', requireAuth, scopeEmpresaId, requirePacien
   }
 });
 
-app.get('/api/trabajos_alto_riesgo/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
+app.get('/api/trabajos_alto_riesgo/:pacienteId', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
-    const result = await query(
+    const result = await req.db.query(
       'SELECT * FROM trabajos_alto_riesgo WHERE paciente_id = $1 ORDER BY fecha DESC, hora DESC',
       [pacienteId]
     );
@@ -1010,11 +1052,11 @@ app.get('/api/trabajos_alto_riesgo/:pacienteId', requireAuth, requirePacienteDeM
   }
 });
 
-app.get('/api/trabajos_alto_riesgo', requireAuth, scopeEmpresaId, async (req, res) => {
+app.get('/api/trabajos_alto_riesgo', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
-    const result = await query(
+    const result = await req.db.query(
       `SELECT t.*, p.nombre AS paciente_nombre, p.area AS paciente_area, p.puesto AS paciente_puesto
        FROM trabajos_alto_riesgo t
        JOIN pacientes p ON p.id = t.paciente_id
@@ -1148,10 +1190,10 @@ app.post('/api/reset-password', async (req, res) => {
 
 // ==================== RUTAS DE USUARIOS ====================
 
-app.get('/api/usuarios', requireAuth, requireAdmin, scopeEmpresaId, async (req, res) => {
+app.get('/api/usuarios', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
   try {
     const { empresa_id } = req.query;
-    const result = await query(
+    const result = await req.db.query(
       'SELECT id, num_empleado, nombre, rol, fecha_registro FROM usuarios WHERE empresa_id = $1',
       [empresa_id]
     );
@@ -1161,10 +1203,10 @@ app.get('/api/usuarios', requireAuth, requireAdmin, scopeEmpresaId, async (req, 
   }
 });
 
-app.get('/api/asistencias', requireAuth, requireAdmin, scopeEmpresaId, async (req, res) => {
+app.get('/api/asistencias', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
   try {
     const { empresa_id } = req.query;
-    const result = await query(
+    const result = await req.db.query(
       `SELECT a.id, a.fecha_hora, u.nombre, u.num_empleado, u.rol
        FROM asistencias a
        JOIN usuarios u ON a.usuario_id = u.id
@@ -1179,7 +1221,7 @@ app.get('/api/asistencias', requireAuth, requireAdmin, scopeEmpresaId, async (re
   }
 });
 
-app.post('/api/usuarios', requireAuth, requireAdmin, scopeEmpresaId, async (req, res) => {
+app.post('/api/usuarios', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
   const { num_empleado, nombre, rol, password, empresa_id, correo } = req.body;
 
   if (!num_empleado || !nombre || !rol || !password) {
@@ -1188,7 +1230,7 @@ app.post('/api/usuarios', requireAuth, requireAdmin, scopeEmpresaId, async (req,
 
   try {
     const passwordHash = await bcrypt.hash(password, 10);
-    const result = await queryRun(
+    const result = await req.db.queryRun(
       `INSERT INTO usuarios (num_empleado, nombre, rol, password, empresa_id, correo, fecha_registro)
        VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING id`,
       [num_empleado, nombre, rol, passwordHash, empresa_id, correo || null]
@@ -1204,7 +1246,7 @@ app.post('/api/usuarios', requireAuth, requireAdmin, scopeEmpresaId, async (req,
 
 // Alta masiva de usuarios desde un Excel (número de empleado, nombre, rol,
 // contraseña), para no tener que crear cuentas una por una.
-app.post('/api/usuarios/importar', requireAuth, requireAdmin, scopeEmpresaId, async (req, res) => {
+app.post('/api/usuarios/importar', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
   const { empresa_id, usuarios: listaUsuarios } = req.body;
   if (!empresa_id || !Array.isArray(listaUsuarios) || listaUsuarios.length === 0) {
     return res.status(400).json({ error: 'Se requiere una lista de usuarios' });
@@ -1220,7 +1262,7 @@ app.post('/api/usuarios/importar', requireAuth, requireAdmin, scopeEmpresaId, as
     }
     try {
       const passwordHash = await bcrypt.hash(u.password, 10);
-      await queryRun(
+      await req.db.queryRun(
         `INSERT INTO usuarios (num_empleado, nombre, rol, password, empresa_id, fecha_registro)
          VALUES ($1, $2, $3, $4, $5, NOW())`,
         [u.num_empleado, u.nombre, u.rol, passwordHash, empresa_id]
@@ -1233,26 +1275,26 @@ app.post('/api/usuarios/importar', requireAuth, requireAdmin, scopeEmpresaId, as
   res.json({ insertados, errores });
 });
 
-app.delete('/api/usuarios/:id', requireAuth, requireAdmin, scopeEmpresaId, async (req, res) => {
+app.delete('/api/usuarios/:id', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
   const { id } = req.params;
   const { empresa_id } = req.query;
 
   try {
-    const user = await queryOne('SELECT num_empleado FROM usuarios WHERE id = $1 AND empresa_id = $2', [id, empresa_id]);
+    const user = await req.db.queryOne('SELECT num_empleado FROM usuarios WHERE id = $1 AND empresa_id = $2', [id, empresa_id]);
     if (!user) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
     if (user.num_empleado === 'ADMIN001') {
       return res.status(403).json({ error: 'No se puede eliminar al administrador principal' });
     }
-    await queryRun('DELETE FROM usuarios WHERE id = $1 AND empresa_id = $2', [id, empresa_id]);
+    await req.db.queryRun('DELETE FROM usuarios WHERE id = $1 AND empresa_id = $2', [id, empresa_id]);
     res.json({ message: 'Usuario eliminado correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.patch('/api/usuarios/:id/resetear-password', requireAuth, requireAdmin, scopeEmpresaId, async (req, res) => {
+app.patch('/api/usuarios/:id/resetear-password', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
   const { id } = req.params;
   const { nueva_password, empresa_id } = req.body;
 
@@ -1262,7 +1304,7 @@ app.patch('/api/usuarios/:id/resetear-password', requireAuth, requireAdmin, scop
 
   try {
     const passwordHash = await bcrypt.hash(nueva_password, 10);
-    await queryRun('UPDATE usuarios SET password = $1 WHERE id = $2 AND empresa_id = $3', [passwordHash, id, empresa_id]);
+    await req.db.queryRun('UPDATE usuarios SET password = $1 WHERE id = $2 AND empresa_id = $3', [passwordHash, id, empresa_id]);
     res.json({ message: 'Contraseña actualizada correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1273,7 +1315,7 @@ app.patch('/api/usuarios/:id/resetear-password', requireAuth, requireAdmin, scop
 // cualquier usuario de cualquier empresa (por num_empleado, sin filtrar
 // por empresa_id). Cubre el caso de que el único admin de una empresa
 // olvide su contraseña y no haya nadie más ahí que pueda ayudarlo.
-app.patch('/api/usuarios/resetear-password-admin', requireAuth, requireSuperadmin, async (req, res) => {
+app.patch('/api/usuarios/resetear-password-admin', requireAuth, withDbClient, requireSuperadmin, async (req, res) => {
   const { num_empleado, nueva_password } = req.body;
 
   if (!num_empleado || !nueva_password) {
@@ -1282,7 +1324,7 @@ app.patch('/api/usuarios/resetear-password-admin', requireAuth, requireSuperadmi
 
   try {
     const passwordHash = await bcrypt.hash(nueva_password, 10);
-    const result = await queryRun('UPDATE usuarios SET password = $1 WHERE num_empleado = $2 RETURNING id', [passwordHash, num_empleado]);
+    const result = await req.db.queryRun('UPDATE usuarios SET password = $1 WHERE num_empleado = $2 RETURNING id', [passwordHash, num_empleado]);
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'No existe un usuario con ese número de empleado' });
     }
@@ -1294,27 +1336,27 @@ app.patch('/api/usuarios/resetear-password-admin', requireAuth, requireSuperadmi
 
 // ==================== RUTAS DE ESTADÍSTICAS ====================
 
-app.get('/api/estadisticas', requireAuth, scopeEmpresaId, async (req, res) => {
+app.get('/api/estadisticas', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   try {
     const { empresa_id } = req.query;
-    const totalPacientes = await queryOne('SELECT COUNT(*) as total FROM pacientes WHERE empresa_id = $1', [empresa_id]);
-    const totalConsultas = await queryOne(
+    const totalPacientes = await req.db.queryOne('SELECT COUNT(*) as total FROM pacientes WHERE empresa_id = $1', [empresa_id]);
+    const totalConsultas = await req.db.queryOne(
       'SELECT COUNT(*) as total FROM consultas c JOIN pacientes p ON c.paciente_id = p.id WHERE p.empresa_id = $1',
       [empresa_id]
     );
-    const totalEMI = await queryOne(
+    const totalEMI = await req.db.queryOne(
       'SELECT COUNT(*) as total FROM emi e JOIN pacientes p ON e.paciente_id = p.id WHERE p.empresa_id = $1',
       [empresa_id]
     );
-    const totalEMP = await queryOne(
+    const totalEMP = await req.db.queryOne(
       'SELECT COUNT(*) as total FROM emp e JOIN pacientes p ON e.paciente_id = p.id WHERE p.empresa_id = $1',
       [empresa_id]
     );
-    const totalEMR = await queryOne(
+    const totalEMR = await req.db.queryOne(
       'SELECT COUNT(*) as total FROM emr e JOIN pacientes p ON e.paciente_id = p.id WHERE p.empresa_id = $1',
       [empresa_id]
     );
-    const totalVulnerabilidad = await queryOne(
+    const totalVulnerabilidad = await req.db.queryOne(
       'SELECT COUNT(*) as total FROM vulnerabilidad v JOIN pacientes p ON v.paciente_id = p.id WHERE p.empresa_id = $1',
       [empresa_id]
     );
@@ -1332,10 +1374,10 @@ app.get('/api/estadisticas', requireAuth, scopeEmpresaId, async (req, res) => {
   }
 });
 
-app.get('/api/top-motivos', requireAuth, scopeEmpresaId, async (req, res) => {
+app.get('/api/top-motivos', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   try {
     const { empresa_id } = req.query;
-    const result = await query(`
+    const result = await req.db.query(`
       SELECT motivo, COUNT(*) as count
       FROM consultas c
       JOIN pacientes p ON c.paciente_id = p.id
@@ -1350,10 +1392,10 @@ app.get('/api/top-motivos', requireAuth, scopeEmpresaId, async (req, res) => {
   }
 });
 
-app.get('/api/top-areas', requireAuth, scopeEmpresaId, async (req, res) => {
+app.get('/api/top-areas', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   try {
     const { empresa_id } = req.query;
-    const result = await query(`
+    const result = await req.db.query(`
       SELECT p.area, COUNT(c.id) as count
       FROM consultas c
       JOIN pacientes p ON c.paciente_id = p.id
@@ -1368,10 +1410,10 @@ app.get('/api/top-areas', requireAuth, scopeEmpresaId, async (req, res) => {
   }
 });
 
-app.get('/api/consultas-por-mes', requireAuth, scopeEmpresaId, async (req, res) => {
+app.get('/api/consultas-por-mes', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   try {
     const { empresa_id } = req.query;
-    const result = await query(`
+    const result = await req.db.query(`
       SELECT TO_CHAR(c.fecha, 'YYYY-MM') as mes, COUNT(*) as count
       FROM consultas c
       JOIN pacientes p ON c.paciente_id = p.id
@@ -1386,10 +1428,10 @@ app.get('/api/consultas-por-mes', requireAuth, scopeEmpresaId, async (req, res) 
   }
 });
 
-app.get('/api/pacientes-por-area', requireAuth, scopeEmpresaId, async (req, res) => {
+app.get('/api/pacientes-por-area', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
   try {
     const { empresa_id } = req.query;
-    const result = await query(`
+    const result = await req.db.query(`
       SELECT area, COUNT(*) as count
       FROM pacientes
       WHERE empresa_id = $1 AND area IS NOT NULL AND area != ''
@@ -1513,13 +1555,13 @@ app.post('/api/enviar-incapacidad', requireAuth, async (req, res) => {
 // Actividades personales del usuario (reunión, consulta, seguimiento,
 // informe) para el calendario de Mi Agenda.
 
-app.post('/api/agenda', requireAuth, scopeEmpresaId, scopeUsuarioId, async (req, res) => {
+app.post('/api/agenda', requireAuth, withDbClient, scopeEmpresaId, scopeUsuarioId, async (req, res) => {
   const { usuario_id, empresa_id, tipo, descripcion, fecha, hora } = req.body;
   if (!usuario_id || !empresa_id || !tipo || !fecha) {
     return res.status(400).json({ error: 'Faltan campos requeridos' });
   }
   try {
-    const result = await queryRun(
+    const result = await req.db.queryRun(
       `INSERT INTO agenda_actividades (usuario_id, empresa_id, tipo, descripcion, fecha, hora)
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
       [usuario_id, empresa_id, tipo, descripcion, fecha, hora || null]
@@ -1530,7 +1572,7 @@ app.post('/api/agenda', requireAuth, scopeEmpresaId, scopeUsuarioId, async (req,
   }
 });
 
-app.get('/api/agenda', requireAuth, scopeEmpresaId, scopeUsuarioId, async (req, res) => {
+app.get('/api/agenda', requireAuth, withDbClient, scopeEmpresaId, scopeUsuarioId, async (req, res) => {
   const { usuario_id, empresa_id, mes, anio } = req.query;
   if (!usuario_id || !empresa_id) {
     return res.status(400).json({ error: 'Se requiere usuario_id y empresa_id' });
@@ -1543,18 +1585,18 @@ app.get('/api/agenda', requireAuth, scopeEmpresaId, scopeUsuarioId, async (req, 
       sql += ` AND EXTRACT(MONTH FROM fecha) = $${params.length - 1} AND EXTRACT(YEAR FROM fecha) = $${params.length}`;
     }
     sql += ' ORDER BY fecha, hora';
-    const result = await query(sql, params);
+    const result = await req.db.query(sql, params);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.put('/api/agenda/:id', requireAuth, scopeUsuarioId, async (req, res) => {
+app.put('/api/agenda/:id', requireAuth, withDbClient, scopeUsuarioId, async (req, res) => {
   const { id } = req.params;
   const { usuario_id, tipo, descripcion, fecha, hora } = req.body;
   try {
-    await queryRun(
+    await req.db.queryRun(
       `UPDATE agenda_actividades SET tipo = $1, descripcion = $2, fecha = $3, hora = $4
        WHERE id = $5 AND usuario_id = $6`,
       [tipo, descripcion, fecha, hora || null, id, usuario_id]
@@ -1565,11 +1607,11 @@ app.put('/api/agenda/:id', requireAuth, scopeUsuarioId, async (req, res) => {
   }
 });
 
-app.delete('/api/agenda/:id', requireAuth, scopeUsuarioId, async (req, res) => {
+app.delete('/api/agenda/:id', requireAuth, withDbClient, scopeUsuarioId, async (req, res) => {
   const { id } = req.params;
   const { usuario_id } = req.query;
   try {
-    await queryRun('DELETE FROM agenda_actividades WHERE id = $1 AND usuario_id = $2', [id, usuario_id]);
+    await req.db.queryRun('DELETE FROM agenda_actividades WHERE id = $1 AND usuario_id = $2', [id, usuario_id]);
     res.json({ message: 'Actividad eliminada correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });

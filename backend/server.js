@@ -3,6 +3,7 @@ const cors = require('cors');
 const multer = require('multer');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { query, queryOne, queryRun, supabase } = require('./database');
 const { enviarCorreo, enviarCorreoSimple } = require('./emailService');
 
@@ -10,8 +11,109 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
+if (!process.env.JWT_SECRET) {
+  throw new Error('Falta configurar JWT_SECRET en las variables de entorno');
+}
+const JWT_SECRET = process.env.JWT_SECRET;
+
 app.use(cors());
 app.use(express.json());
+
+// ==================== AUTENTICACIÓN Y AISLAMIENTO MULTIEMPRESA ====================
+// Toda ruta que toque datos de una empresa debe pasar por requireAuth, que
+// verifica el token emitido en /api/login y expone en req.auth quién es el
+// usuario, su empresa y su rol. Nunca se debe confiar en el empresa_id o
+// rol que mande el cliente: siempre se usa req.auth.
+
+const requireAuth = (req, res, next) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) {
+    return res.status(401).json({ error: 'No autenticado' });
+  }
+  try {
+    req.auth = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Sesión inválida o expirada' });
+  }
+};
+
+const requireAdmin = (req, res, next) => {
+  if (req.auth.rol !== 'admin' && !req.auth.es_superadmin) {
+    return res.status(403).json({ error: 'No tienes permiso para esta acción' });
+  }
+  next();
+};
+
+const requireSuperadmin = (req, res, next) => {
+  if (!req.auth.es_superadmin) {
+    return res.status(403).json({ error: 'No tienes permiso para esta acción' });
+  }
+  next();
+};
+
+// Resuelve qué empresa_id debe usarse en la consulta: la del token, salvo
+// que el usuario sea superadmin (que sí puede operar sobre otra empresa
+// explícita, por ejemplo desde "Ver detalles" en Gestión de Empresas). El
+// valor resuelto se inyecta en query y body para que el resto de cada ruta
+// pueda seguir leyendo empresa_id como ya lo hacía, sin más cambios.
+const scopeEmpresaId = (req, res, next) => {
+  const empresaCliente = req.body?.empresa_id || req.query?.empresa_id;
+  const empresaId = req.auth.es_superadmin && empresaCliente ? empresaCliente : req.auth.empresa_id;
+  req.query.empresa_id = empresaId;
+  if (req.body && typeof req.body === 'object') {
+    req.body.empresa_id = empresaId;
+  }
+  next();
+};
+
+// Mi Agenda es personal: nadie debe poder leer o modificar la agenda de
+// otro usuario, así que usuario_id siempre se toma del token, nunca del
+// cliente.
+const scopeUsuarioId = (req, res, next) => {
+  req.query.usuario_id = req.auth.id;
+  if (req.body && typeof req.body === 'object') {
+    req.body.usuario_id = req.auth.id;
+  }
+  next();
+};
+
+// Para rutas identificadas por paciente_id (no por empresa_id directo):
+// confirma que ese paciente pertenece a la empresa del usuario autenticado
+// antes de dejar pasar la lectura/escritura. Los superadmin no tienen
+// restricción (necesitan poder dar soporte a cualquier empresa).
+const requirePacienteDeMiEmpresa = (obtenerPacienteId) => async (req, res, next) => {
+  if (req.auth.es_superadmin) return next();
+  try {
+    const pacienteId = obtenerPacienteId(req);
+    const paciente = await queryOne('SELECT empresa_id FROM pacientes WHERE id = $1', [pacienteId]);
+    if (!paciente || paciente.empresa_id !== req.auth.empresa_id) {
+      return res.status(403).json({ error: 'No tienes acceso a este paciente' });
+    }
+    next();
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Igual que la anterior, pero para recursos identificados por su propio id
+// (consultas), que hay que resolver primero al paciente dueño.
+const requireConsultaDeMiEmpresa = async (req, res, next) => {
+  if (req.auth.es_superadmin) return next();
+  try {
+    const fila = await queryOne(
+      'SELECT p.empresa_id FROM consultas c JOIN pacientes p ON c.paciente_id = p.id WHERE c.id = $1',
+      [req.params.id]
+    );
+    if (!fila || fila.empresa_id !== req.auth.empresa_id) {
+      return res.status(403).json({ error: 'No tienes acceso a esta consulta' });
+    }
+    next();
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
 
 // ==================== RUTAS DE EMPRESAS ====================
 
@@ -54,7 +156,7 @@ const generarSlugUnico = async (nombre) => {
   return slug;
 };
 
-app.get('/api/empresas', async (req, res) => {
+app.get('/api/empresas', requireAuth, requireSuperadmin, async (req, res) => {
   try {
     const result = await query('SELECT * FROM empresas ORDER BY id');
     res.json(result.rows);
@@ -101,7 +203,7 @@ const crearEmpresaConAdmin = async ({ nombre, correo, celular, file, adminNumEmp
   return { empresaId, slug };
 };
 
-app.post('/api/empresas', upload.single('logo'), async (req, res) => {
+app.post('/api/empresas', requireAuth, requireSuperadmin, upload.single('logo'), async (req, res) => {
   const { nombre, correo, celular, admin_num_empleado, admin_nombre, admin_password, admin_correo } = req.body;
   if (!nombre) {
     return res.status(400).json({ error: 'El nombre es requerido' });
@@ -158,7 +260,7 @@ app.post('/api/empresas/solicitar-registro', upload.single('logo'), async (req, 
   }
 });
 
-app.patch('/api/empresas/:id/aprobar', async (req, res) => {
+app.patch('/api/empresas/:id/aprobar', requireAuth, requireSuperadmin, async (req, res) => {
   try {
     await queryRun('UPDATE empresas SET activo = true WHERE id = $1', [req.params.id]);
     res.json({ message: 'Empresa aprobada correctamente' });
@@ -167,7 +269,7 @@ app.patch('/api/empresas/:id/aprobar', async (req, res) => {
   }
 });
 
-app.delete('/api/empresas/:id', async (req, res) => {
+app.delete('/api/empresas/:id', requireAuth, requireSuperadmin, async (req, res) => {
   const { id } = req.params;
   try {
     const pacientesCount = await queryOne('SELECT COUNT(*) as total FROM pacientes WHERE empresa_id = $1', [id]);
@@ -182,9 +284,12 @@ app.delete('/api/empresas/:id', async (req, res) => {
   }
 });
 
-app.put('/api/empresas/:id', upload.single('logo'), async (req, res) => {
+app.put('/api/empresas/:id', requireAuth, requireAdmin, upload.single('logo'), async (req, res) => {
   const { id } = req.params;
   const { nombre } = req.body;
+  if (!req.auth.es_superadmin && Number(id) !== req.auth.empresa_id) {
+    return res.status(403).json({ error: 'No tienes permiso para editar esta empresa' });
+  }
   try {
     if (req.file) {
       const logoUrl = await subirLogo(req.file);
@@ -202,7 +307,7 @@ app.put('/api/empresas/:id', upload.single('logo'), async (req, res) => {
 // Usada por Registro de Incapacidad y Registro de Accidente para subir
 // un archivo (imagen o PDF) y guardar solo la URL pública resultante.
 
-app.post('/api/adjuntos', upload.single('archivo'), async (req, res) => {
+app.post('/api/adjuntos', requireAuth, upload.single('archivo'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No se recibió ningún archivo' });
@@ -216,7 +321,7 @@ app.post('/api/adjuntos', upload.single('archivo'), async (req, res) => {
 
 // ==================== RUTAS DE PACIENTES ====================
 
-app.get('/api/pacientes', async (req, res) => {
+app.get('/api/pacientes', requireAuth, scopeEmpresaId, async (req, res) => {
   try {
     const { search = '', page = 1, limit = 20, empresa_id } = req.query;
     const pageNum = Math.max(parseInt(page) || 1, 1);
@@ -249,7 +354,7 @@ app.get('/api/pacientes', async (req, res) => {
   }
 });
 
-app.post('/api/pacientes', async (req, res) => {
+app.post('/api/pacientes', requireAuth, scopeEmpresaId, async (req, res) => {
   const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle } = req.body;
   try {
     const result = await queryRun(
@@ -268,7 +373,7 @@ app.post('/api/pacientes', async (req, res) => {
 
 // Alta masiva de pacientes desde un Excel (nombre, área, puesto, etc.) para
 // que una empresa no tenga que registrar empleados uno por uno.
-app.post('/api/pacientes/importar', async (req, res) => {
+app.post('/api/pacientes/importar', requireAuth, scopeEmpresaId, async (req, res) => {
   const { empresa_id, pacientes } = req.body;
   if (!empresa_id || !Array.isArray(pacientes) || pacientes.length === 0) {
     return res.status(400).json({ error: 'Se requiere una lista de pacientes' });
@@ -297,7 +402,7 @@ app.post('/api/pacientes/importar', async (req, res) => {
   res.json({ insertados, errores });
 });
 
-app.put('/api/pacientes/:id', async (req, res) => {
+app.put('/api/pacientes/:id', requireAuth, scopeEmpresaId, async (req, res) => {
   const { id } = req.params;
   const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle } = req.body;
   try {
@@ -313,10 +418,14 @@ app.put('/api/pacientes/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/pacientes/:id', async (req, res) => {
+app.delete('/api/pacientes/:id', requireAuth, scopeEmpresaId, async (req, res) => {
   const { id } = req.params;
   const { empresa_id } = req.query;
   try {
+    const paciente = await queryOne('SELECT id FROM pacientes WHERE id = $1 AND empresa_id = $2', [id, empresa_id]);
+    if (!paciente) {
+      return res.status(404).json({ error: 'Paciente no encontrado' });
+    }
     await queryRun('DELETE FROM consultas WHERE paciente_id = $1', [id]);
     await queryRun('DELETE FROM pacientes WHERE id = $1 AND empresa_id = $2', [id, empresa_id]);
     res.json({ message: 'Paciente eliminado correctamente' });
@@ -327,7 +436,7 @@ app.delete('/api/pacientes/:id', async (req, res) => {
 
 // ==================== RUTAS DE CONSULTAS ====================
 
-app.get('/api/consultas/:pacienteId', async (req, res) => {
+app.get('/api/consultas/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
     const result = await query('SELECT * FROM consultas WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
@@ -337,7 +446,7 @@ app.get('/api/consultas/:pacienteId', async (req, res) => {
   }
 });
 
-app.post('/api/consultas', async (req, res) => {
+app.post('/api/consultas', requireAuth, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { 
     paciente_id, fecha, motivo, alergias, alergias_detalle, cabeza, cuello, torax, abdomen, espalda,
     extremidades_superiores, extremidades_inferiores, ojos_oidos_garganta, causa,
@@ -361,7 +470,7 @@ app.post('/api/consultas', async (req, res) => {
   }
 });
 
-app.put('/api/consultas/:id', async (req, res) => {
+app.put('/api/consultas/:id', requireAuth, requireConsultaDeMiEmpresa, async (req, res) => {
   const { id } = req.params;
   const { 
     fecha, motivo, alergias, alergias_detalle, cabeza, cuello, torax, abdomen, espalda,
@@ -387,7 +496,7 @@ app.put('/api/consultas/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/consultas/:id', async (req, res) => {
+app.delete('/api/consultas/:id', requireAuth, requireConsultaDeMiEmpresa, async (req, res) => {
   const { id } = req.params;
   try {
     await queryRun('DELETE FROM consultas WHERE id = $1', [id]);
@@ -399,7 +508,7 @@ app.delete('/api/consultas/:id', async (req, res) => {
 
 // ==================== RUTAS DE EXÁMENES ====================
 
-app.post('/api/emi', async (req, res) => {
+app.post('/api/emi', requireAuth, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, fecha, exposicion_riesgos, trabajos_previos, riesgos_laborales,
     accidentes_previos, enfermedades_laborales, antecedentes_familiares,
     antecedentes_personales_no_patologicos, antecedentes_personales_patologicos,
@@ -427,7 +536,7 @@ app.post('/api/emi', async (req, res) => {
   }
 });
 
-app.get('/api/emi/:pacienteId', async (req, res) => {
+app.get('/api/emi/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
     const result = await query('SELECT * FROM emi WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
@@ -437,7 +546,7 @@ app.get('/api/emi/:pacienteId', async (req, res) => {
   }
 });
 
-app.get('/api/emi', async (req, res) => {
+app.get('/api/emi', requireAuth, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
@@ -456,7 +565,7 @@ app.get('/api/emi', async (req, res) => {
   }
 });
 
-app.post('/api/emp', async (req, res) => {
+app.post('/api/emp', requireAuth, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, fecha, exposicion_auditiva, exposicion_respiratoria,
     exposicion_movimientos_repetitivos, exposicion_postural, exposicion_cargas_manuales,
     exposicion_visual, exposicion_psicosocial, exposicion_trabajos_alto_riesgo,
@@ -484,7 +593,7 @@ app.post('/api/emp', async (req, res) => {
   }
 });
 
-app.get('/api/emp/:pacienteId', async (req, res) => {
+app.get('/api/emp/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
     const result = await query('SELECT * FROM emp WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
@@ -494,7 +603,7 @@ app.get('/api/emp/:pacienteId', async (req, res) => {
   }
 });
 
-app.get('/api/emp', async (req, res) => {
+app.get('/api/emp', requireAuth, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
@@ -513,7 +622,7 @@ app.get('/api/emp', async (req, res) => {
   }
 });
 
-app.post('/api/emr', async (req, res) => {
+app.post('/api/emr', requireAuth, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, fecha, secuelas_auditiva, secuelas_respiratoria, secuelas_motriz,
     secuelas_pensamiento, secuelas_fuerza, secuelas_neurologica, secuelas_psicosocial,
     secuelas_visual, interrogatorio_aparatos, impresion_diagnostica,
@@ -541,7 +650,7 @@ app.post('/api/emr', async (req, res) => {
   }
 });
 
-app.get('/api/emr/:pacienteId', async (req, res) => {
+app.get('/api/emr/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
     const result = await query('SELECT * FROM emr WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
@@ -551,7 +660,7 @@ app.get('/api/emr/:pacienteId', async (req, res) => {
   }
 });
 
-app.get('/api/emr', async (req, res) => {
+app.get('/api/emr', requireAuth, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
@@ -570,7 +679,7 @@ app.get('/api/emr', async (req, res) => {
   }
 });
 
-app.post('/api/vulnerabilidad', async (req, res) => {
+app.post('/api/vulnerabilidad', requireAuth, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, fecha, tipo_vulnerabilidad, embarazo, cronico_degenerativa,
     hepato_renal, cardiologica, dermatologica, hematologica, impresion_diagnostica,
     cie10, exploracion_fisica, signos_vitales, agudeza_visual } = req.body;
@@ -592,7 +701,7 @@ app.post('/api/vulnerabilidad', async (req, res) => {
   }
 });
 
-app.get('/api/vulnerabilidad/:pacienteId', async (req, res) => {
+app.get('/api/vulnerabilidad/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
     const result = await query('SELECT * FROM vulnerabilidad WHERE paciente_id = $1 ORDER BY fecha DESC', [pacienteId]);
@@ -602,7 +711,7 @@ app.get('/api/vulnerabilidad/:pacienteId', async (req, res) => {
   }
 });
 
-app.get('/api/vulnerabilidad', async (req, res) => {
+app.get('/api/vulnerabilidad', requireAuth, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
@@ -623,7 +732,7 @@ app.get('/api/vulnerabilidad', async (req, res) => {
 
 // ==================== RUTAS DE BITÁCORA ====================
 
-app.post('/api/bitacora_registros', async (req, res) => {
+app.post('/api/bitacora_registros', requireAuth, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, empresa_id, fecha, hora, alergias, embarazo, cie10, tratamiento, firma } = req.body;
   try {
     const result = await queryRun(
@@ -637,7 +746,7 @@ app.post('/api/bitacora_registros', async (req, res) => {
   }
 });
 
-app.get('/api/bitacora_registros/:pacienteId', async (req, res) => {
+app.get('/api/bitacora_registros/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
     const result = await query(
@@ -652,7 +761,7 @@ app.get('/api/bitacora_registros/:pacienteId', async (req, res) => {
 
 // Log general de bitácora con filtro por fecha/hora/nombre/área, para la
 // vista de búsqueda (distinta de "listar por paciente" de arriba).
-app.get('/api/bitacora_registros', async (req, res) => {
+app.get('/api/bitacora_registros', requireAuth, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
@@ -673,7 +782,7 @@ app.get('/api/bitacora_registros', async (req, res) => {
 
 // ==================== RUTAS DE INCAPACIDADES ====================
 
-app.post('/api/incapacidades', async (req, res) => {
+app.post('/api/incapacidades', requireAuth, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, empresa_id, fecha, hora, tipo, descripcion, dias, manejo, adjunto_url } = req.body;
   try {
     const result = await queryRun(
@@ -687,7 +796,7 @@ app.post('/api/incapacidades', async (req, res) => {
   }
 });
 
-app.get('/api/incapacidades/:pacienteId', async (req, res) => {
+app.get('/api/incapacidades/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
     const result = await query(
@@ -700,7 +809,7 @@ app.get('/api/incapacidades/:pacienteId', async (req, res) => {
   }
 });
 
-app.get('/api/incapacidades', async (req, res) => {
+app.get('/api/incapacidades', requireAuth, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
@@ -721,7 +830,7 @@ app.get('/api/incapacidades', async (req, res) => {
 
 // ==================== RUTAS DE SEGUIMIENTOS ====================
 
-app.post('/api/seguimientos', async (req, res) => {
+app.post('/api/seguimientos', requireAuth, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, empresa_id, fecha, hora, tipo, observacion, cie10, tratamiento } = req.body;
   try {
     const result = await queryRun(
@@ -735,7 +844,7 @@ app.post('/api/seguimientos', async (req, res) => {
   }
 });
 
-app.get('/api/seguimientos/:pacienteId', async (req, res) => {
+app.get('/api/seguimientos/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
     const result = await query(
@@ -748,7 +857,7 @@ app.get('/api/seguimientos/:pacienteId', async (req, res) => {
   }
 });
 
-app.get('/api/seguimientos', async (req, res) => {
+app.get('/api/seguimientos', requireAuth, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
@@ -769,7 +878,7 @@ app.get('/api/seguimientos', async (req, res) => {
 
 // ==================== RUTAS DE RESTRICCIONES ====================
 
-app.post('/api/restricciones', async (req, res) => {
+app.post('/api/restricciones', requireAuth, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, empresa_id, fecha, hora, tipo, dias, descripcion } = req.body;
   try {
     const result = await queryRun(
@@ -783,7 +892,7 @@ app.post('/api/restricciones', async (req, res) => {
   }
 });
 
-app.get('/api/restricciones/:pacienteId', async (req, res) => {
+app.get('/api/restricciones/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
     const result = await query(
@@ -796,7 +905,7 @@ app.get('/api/restricciones/:pacienteId', async (req, res) => {
   }
 });
 
-app.get('/api/restricciones', async (req, res) => {
+app.get('/api/restricciones', requireAuth, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
@@ -817,7 +926,7 @@ app.get('/api/restricciones', async (req, res) => {
 
 // ==================== RUTAS DE ACCIDENTES ====================
 
-app.post('/api/accidentes', async (req, res) => {
+app.post('/api/accidentes', requireAuth, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, empresa_id, fecha, hora, hechos, exploracion_fisica, diagnostico,
     plan_accion, alcoholimetria, antidoping, adjunto_url } = req.body;
   try {
@@ -835,7 +944,7 @@ app.post('/api/accidentes', async (req, res) => {
   }
 });
 
-app.get('/api/accidentes/:pacienteId', async (req, res) => {
+app.get('/api/accidentes/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
     const result = await query(
@@ -848,7 +957,7 @@ app.get('/api/accidentes/:pacienteId', async (req, res) => {
   }
 });
 
-app.get('/api/accidentes', async (req, res) => {
+app.get('/api/accidentes', requireAuth, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
@@ -869,7 +978,7 @@ app.get('/api/accidentes', async (req, res) => {
 
 // ==================== RUTAS DE TRABAJOS DE ALTO RIESGO ====================
 
-app.post('/api/trabajos_alto_riesgo', async (req, res) => {
+app.post('/api/trabajos_alto_riesgo', requireAuth, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
   const { paciente_id, empresa_id, fecha, hora, tipo_riesgo, agudeza_visual, tension_arterial,
     frecuencia_cardiaca, glucosa, prueba_equilibrio, alcoholimetria, antidoping, autorizada } = req.body;
   try {
@@ -887,7 +996,7 @@ app.post('/api/trabajos_alto_riesgo', async (req, res) => {
   }
 });
 
-app.get('/api/trabajos_alto_riesgo/:pacienteId', async (req, res) => {
+app.get('/api/trabajos_alto_riesgo/:pacienteId', requireAuth, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
   const { pacienteId } = req.params;
   try {
     const result = await query(
@@ -900,7 +1009,7 @@ app.get('/api/trabajos_alto_riesgo/:pacienteId', async (req, res) => {
   }
 });
 
-app.get('/api/trabajos_alto_riesgo', async (req, res) => {
+app.get('/api/trabajos_alto_riesgo', requireAuth, scopeEmpresaId, async (req, res) => {
   const { search = '', empresa_id } = req.query;
   try {
     const searchTerm = `%${search}%`;
@@ -956,9 +1065,15 @@ app.post('/api/login', async (req, res) => {
       console.error('Error al registrar asistencia:', asistenciaError.message);
     }
     const { password: _, empresa_activa: __, ...userWithoutPassword } = result;
+    const token = jwt.sign(
+      { id: result.id, empresa_id: result.empresa_id, rol: result.rol, es_superadmin: result.es_superadmin },
+      JWT_SECRET,
+      { expiresIn: '12h' }
+    );
     res.json({
       success: true,
       user: userWithoutPassword,
+      token,
       message: `Bienvenido ${result.nombre}`
     });
   } catch (error) {
@@ -1032,7 +1147,7 @@ app.post('/api/reset-password', async (req, res) => {
 
 // ==================== RUTAS DE USUARIOS ====================
 
-app.get('/api/usuarios', async (req, res) => {
+app.get('/api/usuarios', requireAuth, requireAdmin, scopeEmpresaId, async (req, res) => {
   try {
     const { empresa_id } = req.query;
     const result = await query(
@@ -1045,7 +1160,7 @@ app.get('/api/usuarios', async (req, res) => {
   }
 });
 
-app.get('/api/asistencias', async (req, res) => {
+app.get('/api/asistencias', requireAuth, requireAdmin, scopeEmpresaId, async (req, res) => {
   try {
     const { empresa_id } = req.query;
     const result = await query(
@@ -1063,7 +1178,7 @@ app.get('/api/asistencias', async (req, res) => {
   }
 });
 
-app.post('/api/usuarios', async (req, res) => {
+app.post('/api/usuarios', requireAuth, requireAdmin, scopeEmpresaId, async (req, res) => {
   const { num_empleado, nombre, rol, password, empresa_id, correo } = req.body;
 
   if (!num_empleado || !nombre || !rol || !password) {
@@ -1088,7 +1203,7 @@ app.post('/api/usuarios', async (req, res) => {
 
 // Alta masiva de usuarios desde un Excel (número de empleado, nombre, rol,
 // contraseña), para no tener que crear cuentas una por una.
-app.post('/api/usuarios/importar', async (req, res) => {
+app.post('/api/usuarios/importar', requireAuth, requireAdmin, scopeEmpresaId, async (req, res) => {
   const { empresa_id, usuarios: listaUsuarios } = req.body;
   if (!empresa_id || !Array.isArray(listaUsuarios) || listaUsuarios.length === 0) {
     return res.status(400).json({ error: 'Se requiere una lista de usuarios' });
@@ -1117,12 +1232,12 @@ app.post('/api/usuarios/importar', async (req, res) => {
   res.json({ insertados, errores });
 });
 
-app.delete('/api/usuarios/:id', async (req, res) => {
+app.delete('/api/usuarios/:id', requireAuth, requireAdmin, scopeEmpresaId, async (req, res) => {
   const { id } = req.params;
   const { empresa_id } = req.query;
 
   try {
-    const user = await queryOne('SELECT num_empleado FROM usuarios WHERE id = $1', [id]);
+    const user = await queryOne('SELECT num_empleado FROM usuarios WHERE id = $1 AND empresa_id = $2', [id, empresa_id]);
     if (!user) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
@@ -1136,7 +1251,7 @@ app.delete('/api/usuarios/:id', async (req, res) => {
   }
 });
 
-app.patch('/api/usuarios/:id/resetear-password', async (req, res) => {
+app.patch('/api/usuarios/:id/resetear-password', requireAuth, requireAdmin, scopeEmpresaId, async (req, res) => {
   const { id } = req.params;
   const { nueva_password, empresa_id } = req.body;
 
@@ -1157,7 +1272,7 @@ app.patch('/api/usuarios/:id/resetear-password', async (req, res) => {
 // cualquier usuario de cualquier empresa (por num_empleado, sin filtrar
 // por empresa_id). Cubre el caso de que el único admin de una empresa
 // olvide su contraseña y no haya nadie más ahí que pueda ayudarlo.
-app.patch('/api/usuarios/resetear-password-admin', async (req, res) => {
+app.patch('/api/usuarios/resetear-password-admin', requireAuth, requireSuperadmin, async (req, res) => {
   const { num_empleado, nueva_password } = req.body;
 
   if (!num_empleado || !nueva_password) {
@@ -1178,7 +1293,7 @@ app.patch('/api/usuarios/resetear-password-admin', async (req, res) => {
 
 // ==================== RUTAS DE ESTADÍSTICAS ====================
 
-app.get('/api/estadisticas', async (req, res) => {
+app.get('/api/estadisticas', requireAuth, scopeEmpresaId, async (req, res) => {
   try {
     const { empresa_id } = req.query;
     const totalPacientes = await queryOne('SELECT COUNT(*) as total FROM pacientes WHERE empresa_id = $1', [empresa_id]);
@@ -1216,7 +1331,7 @@ app.get('/api/estadisticas', async (req, res) => {
   }
 });
 
-app.get('/api/top-motivos', async (req, res) => {
+app.get('/api/top-motivos', requireAuth, scopeEmpresaId, async (req, res) => {
   try {
     const { empresa_id } = req.query;
     const result = await query(`
@@ -1234,7 +1349,7 @@ app.get('/api/top-motivos', async (req, res) => {
   }
 });
 
-app.get('/api/top-areas', async (req, res) => {
+app.get('/api/top-areas', requireAuth, scopeEmpresaId, async (req, res) => {
   try {
     const { empresa_id } = req.query;
     const result = await query(`
@@ -1252,7 +1367,7 @@ app.get('/api/top-areas', async (req, res) => {
   }
 });
 
-app.get('/api/consultas-por-mes', async (req, res) => {
+app.get('/api/consultas-por-mes', requireAuth, scopeEmpresaId, async (req, res) => {
   try {
     const { empresa_id } = req.query;
     const result = await query(`
@@ -1270,7 +1385,7 @@ app.get('/api/consultas-por-mes', async (req, res) => {
   }
 });
 
-app.get('/api/pacientes-por-area', async (req, res) => {
+app.get('/api/pacientes-por-area', requireAuth, scopeEmpresaId, async (req, res) => {
   try {
     const { empresa_id } = req.query;
     const result = await query(`
@@ -1288,7 +1403,7 @@ app.get('/api/pacientes-por-area', async (req, res) => {
 
 // ==================== RUTAS DE ENVÍO DE CORREOS ====================
 
-app.post('/api/enviar-constancia', async (req, res) => {
+app.post('/api/enviar-constancia', requireAuth, async (req, res) => {
   const { destinatario, paciente, consulta, pdfBase64 } = req.body;
   
   if (!destinatario || !paciente || !consulta || !pdfBase64) {
@@ -1323,7 +1438,7 @@ app.post('/api/enviar-constancia', async (req, res) => {
   }
 });
 
-app.post('/api/enviar-receta', async (req, res) => {
+app.post('/api/enviar-receta', requireAuth, async (req, res) => {
   const { destinatario, paciente, consulta, pdfBase64 } = req.body;
   
   if (!destinatario || !paciente || !consulta || !pdfBase64) {
@@ -1358,7 +1473,7 @@ app.post('/api/enviar-receta', async (req, res) => {
   }
 });
 
-app.post('/api/enviar-incapacidad', async (req, res) => {
+app.post('/api/enviar-incapacidad', requireAuth, async (req, res) => {
   const { destinatario, paciente, consulta, pdfBase64 } = req.body;
   
   if (!destinatario || !paciente || !consulta || !pdfBase64) {
@@ -1397,7 +1512,7 @@ app.post('/api/enviar-incapacidad', async (req, res) => {
 // Actividades personales del usuario (reunión, consulta, seguimiento,
 // informe) para el calendario de Mi Agenda.
 
-app.post('/api/agenda', async (req, res) => {
+app.post('/api/agenda', requireAuth, scopeEmpresaId, scopeUsuarioId, async (req, res) => {
   const { usuario_id, empresa_id, tipo, descripcion, fecha, hora } = req.body;
   if (!usuario_id || !empresa_id || !tipo || !fecha) {
     return res.status(400).json({ error: 'Faltan campos requeridos' });
@@ -1414,7 +1529,7 @@ app.post('/api/agenda', async (req, res) => {
   }
 });
 
-app.get('/api/agenda', async (req, res) => {
+app.get('/api/agenda', requireAuth, scopeEmpresaId, scopeUsuarioId, async (req, res) => {
   const { usuario_id, empresa_id, mes, anio } = req.query;
   if (!usuario_id || !empresa_id) {
     return res.status(400).json({ error: 'Se requiere usuario_id y empresa_id' });
@@ -1434,7 +1549,7 @@ app.get('/api/agenda', async (req, res) => {
   }
 });
 
-app.put('/api/agenda/:id', async (req, res) => {
+app.put('/api/agenda/:id', requireAuth, scopeUsuarioId, async (req, res) => {
   const { id } = req.params;
   const { usuario_id, tipo, descripcion, fecha, hora } = req.body;
   try {
@@ -1449,7 +1564,7 @@ app.put('/api/agenda/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/agenda/:id', async (req, res) => {
+app.delete('/api/agenda/:id', requireAuth, scopeUsuarioId, async (req, res) => {
   const { id } = req.params;
   const { usuario_id } = req.query;
   try {

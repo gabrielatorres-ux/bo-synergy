@@ -26,7 +26,7 @@ ChartJS.register(
   LineElement
 );
 
-function Dashboard({ empresaId }) {
+function Dashboard({ empresaId, token }) {
   const [estadisticas, setEstadisticas] = useState(null);
   const [topMotivos, setTopMotivos] = useState([]);
   const [topAreas, setTopAreas] = useState([]);
@@ -45,12 +45,13 @@ function Dashboard({ empresaId }) {
   const cargarDatos = async () => {
     try {
       const params = { empresa_id: empresaId };
+      const headers = { Authorization: `Bearer ${token}` };
       const [statsRes, motivosRes, areasRes, mesRes, pacientesAreaRes] = await Promise.all([
-        axios.get(`${API_URL}/estadisticas`, { params }),
-        axios.get(`${API_URL}/top-motivos`, { params }),
-        axios.get(`${API_URL}/top-areas`, { params }),
-        axios.get(`${API_URL}/consultas-por-mes`, { params }),
-        axios.get(`${API_URL}/pacientes-por-area`, { params }),
+        axios.get(`${API_URL}/estadisticas`, { params, headers }),
+        axios.get(`${API_URL}/top-motivos`, { params, headers }),
+        axios.get(`${API_URL}/top-areas`, { params, headers }),
+        axios.get(`${API_URL}/consultas-por-mes`, { params, headers }),
+        axios.get(`${API_URL}/pacientes-por-area`, { params, headers }),
       ]);
 
       setEstadisticas(statsRes.data);

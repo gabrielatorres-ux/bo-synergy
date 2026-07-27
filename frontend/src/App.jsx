@@ -376,10 +376,16 @@ function App() {
       .catch(() => setTasasCambio({ usd: 0.055, cop: 220 }));
   }, [mostrarRegistro, tasasCambio]);
 
-  // Agrega automáticamente el empresa_id del usuario logueado a cada
-  // petición, para que el backend filtre los datos de esa empresa.
+  // Agrega automáticamente el token de sesión y el empresa_id del usuario
+  // logueado a cada petición. El backend siempre valida el token y deriva
+  // empresa_id/rol de ahí, así que el empresa_id que se manda aquí es solo
+  // para las llamadas donde el superadmin necesita operar sobre otra
+  // empresa (el backend decide si confía en él o no).
   useEffect(() => {
     const interceptorId = api.interceptors.request.use((config) => {
+      if (usuario?.token) {
+        config.headers = { ...config.headers, Authorization: `Bearer ${usuario.token}` };
+      }
       const empresaId = usuario?.empresa_id;
       if (!empresaId) return config;
       if (config.data instanceof FormData) {
@@ -421,7 +427,7 @@ function App() {
         empresa_id: empresaLogin?.id || undefined
       });
       if (response.data.success) {
-        setUsuario(response.data.user);
+        setUsuario({ ...response.data.user, token: response.data.token });
         setMostrarLogin(false);
         setNumEmpleado('');
         setPassword('');
@@ -751,8 +757,13 @@ function App() {
     try {
       // Usa axios directo (no la instancia `api`) porque el interceptor
       // sobreescribe cualquier empresa_id con el de la empresa del usuario
-      // logueado; aquí el superadmin necesita consultar OTRA empresa.
-      const response = await axios.get(`${API_URL}/usuarios`, { params: { empresa_id: emp.id } });
+      // logueado; aquí el superadmin necesita consultar OTRA empresa. El
+      // token sí hay que mandarlo a mano porque este axios no pasa por el
+      // interceptor.
+      const response = await axios.get(`${API_URL}/usuarios`, {
+        params: { empresa_id: emp.id },
+        headers: { Authorization: `Bearer ${usuario.token}` }
+      });
       setUsuariosEmpresaExpandida(response.data);
     } catch (error) {
       console.error('Error al cargar usuarios de la empresa:', error);
@@ -2850,6 +2861,7 @@ function App() {
             <BuscadorPaciente
               apiUrl={API_URL}
               empresaId={usuario?.empresa_id}
+              token={usuario?.token}
               pacienteSeleccionado={pacienteSeleccionado}
               onSeleccionar={(p) => p ? handleAbrirExamen(tipoExamen || 'emi', p) : handleLimpiarPacienteExamen()}
             />
@@ -3000,6 +3012,7 @@ function App() {
               <BuscadorPaciente
                 apiUrl={API_URL}
                 empresaId={usuario?.empresa_id}
+              token={usuario?.token}
                 pacienteSeleccionado={bitacoraPaciente}
                 onSeleccionar={setBitacoraPaciente}
               />
@@ -3075,6 +3088,7 @@ function App() {
               <BuscadorPaciente
                 apiUrl={API_URL}
                 empresaId={usuario?.empresa_id}
+              token={usuario?.token}
                 pacienteSeleccionado={incapacidadPaciente}
                 onSeleccionar={setIncapacidadPaciente}
               />
@@ -3156,6 +3170,7 @@ function App() {
               <BuscadorPaciente
                 apiUrl={API_URL}
                 empresaId={usuario?.empresa_id}
+              token={usuario?.token}
                 pacienteSeleccionado={seguimientoPaciente}
                 onSeleccionar={setSeguimientoPaciente}
               />
@@ -3234,6 +3249,7 @@ function App() {
               <BuscadorPaciente
                 apiUrl={API_URL}
                 empresaId={usuario?.empresa_id}
+              token={usuario?.token}
                 pacienteSeleccionado={restriccionPaciente}
                 onSeleccionar={setRestriccionPaciente}
               />
@@ -3298,6 +3314,7 @@ function App() {
               <BuscadorPaciente
                 apiUrl={API_URL}
                 empresaId={usuario?.empresa_id}
+              token={usuario?.token}
                 pacienteSeleccionado={accidentePaciente}
                 onSeleccionar={setAccidentePaciente}
               />
@@ -3381,6 +3398,7 @@ function App() {
               <BuscadorPaciente
                 apiUrl={API_URL}
                 empresaId={usuario?.empresa_id}
+              token={usuario?.token}
                 pacienteSeleccionado={altoRiesgoPaciente}
                 onSeleccionar={setAltoRiesgoPaciente}
               />
@@ -3925,7 +3943,7 @@ function App() {
                 Exportar
               </button>
             </div>
-            <Dashboard empresaId={usuario.empresa_id} />
+            <Dashboard empresaId={usuario.empresa_id} token={usuario.token} />
           </div>
         )}
 

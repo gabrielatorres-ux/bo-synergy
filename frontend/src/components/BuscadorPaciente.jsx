@@ -13,7 +13,7 @@ const fontBody = "'Work Sans', -apple-system, sans-serif";
 // al elegir uno muestra su área/puesto de solo lectura. Usado por los
 // formularios de Seguimiento, Restricciones, Accidente, Alto Riesgo y
 // Bitácora, que todos piden "nombre (lupa) que me lleva área y puesto".
-function BuscadorPaciente({ apiUrl, empresaId, pacienteSeleccionado, onSeleccionar, label = 'Paciente' }) {
+function BuscadorPaciente({ apiUrl, empresaId, token, pacienteSeleccionado, onSeleccionar, label = 'Paciente' }) {
   const [busqueda, setBusqueda] = useState('');
   const [resultados, setResultados] = useState([]);
   const [abierto, setAbierto] = useState(false);
@@ -39,7 +39,10 @@ function BuscadorPaciente({ apiUrl, empresaId, pacienteSeleccionado, onSeleccion
     clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       setBuscando(true);
-      axios.get(`${apiUrl}/pacientes`, { params: { search: busqueda, empresa_id: empresaId, limit: 10 } })
+      axios.get(`${apiUrl}/pacientes`, {
+        params: { search: busqueda, empresa_id: empresaId, limit: 10 },
+        headers: { Authorization: `Bearer ${token}` }
+      })
         .then((res) => setResultados(res.data?.pacientes || []))
         .catch(() => setResultados([]))
         .finally(() => setBuscando(false));

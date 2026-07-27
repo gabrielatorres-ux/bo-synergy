@@ -331,14 +331,14 @@ app.get('/api/pacientes', requireAuth, scopeEmpresaId, async (req, res) => {
 
     const result = await query(
       `SELECT * FROM pacientes
-       WHERE empresa_id = $1 AND (nombre ILIKE $2 OR num_empleado ILIKE $2 OR area ILIKE $2)
+       WHERE empresa_id = $1 AND (nombre ILIKE $2 OR num_empleado ILIKE $2 OR area ILIKE $2 OR curp ILIKE $2 OR rfc ILIKE $2)
        ORDER BY id
        LIMIT $3 OFFSET $4`,
       [empresa_id, searchTerm, limitNum, offset]
     );
     const totalResult = await queryOne(
       `SELECT COUNT(*) as total FROM pacientes
-       WHERE empresa_id = $1 AND (nombre ILIKE $2 OR num_empleado ILIKE $2 OR area ILIKE $2)`,
+       WHERE empresa_id = $1 AND (nombre ILIKE $2 OR num_empleado ILIKE $2 OR area ILIKE $2 OR curp ILIKE $2 OR rfc ILIKE $2)`,
       [empresa_id, searchTerm]
     );
     const total = parseInt(totalResult.total);
@@ -355,12 +355,12 @@ app.get('/api/pacientes', requireAuth, scopeEmpresaId, async (req, res) => {
 });
 
 app.post('/api/pacientes', requireAuth, scopeEmpresaId, async (req, res) => {
-  const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle } = req.body;
+  const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle, curp, rfc } = req.body;
   try {
     const result = await queryRun(
-      `INSERT INTO pacientes (num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
-      [num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle]
+      `INSERT INTO pacientes (num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle, curp, rfc)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
+      [num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle, curp || null, rfc || null]
     );
     res.json({ id: result.rows[0]?.id || result.insertId, message: 'Paciente agregado correctamente' });
   } catch (error) {
@@ -389,10 +389,11 @@ app.post('/api/pacientes/importar', requireAuth, scopeEmpresaId, async (req, res
     }
     try {
       await queryRun(
-        `INSERT INTO pacientes (num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        `INSERT INTO pacientes (num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle, curp, rfc)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
         [p.num_empleado || null, p.nombre, p.fecha_nac || null, p.nss || null, p.contacto_emergencia || null,
-          p.puesto || null, p.area || null, p.supervisor || null, empresa_id, p.alergias || false, p.alergias_detalle || null]
+          p.puesto || null, p.area || null, p.supervisor || null, empresa_id, p.alergias || false, p.alergias_detalle || null,
+          p.curp || null, p.rfc || null]
       );
       insertados++;
     } catch (error) {
@@ -404,13 +405,13 @@ app.post('/api/pacientes/importar', requireAuth, scopeEmpresaId, async (req, res
 
 app.put('/api/pacientes/:id', requireAuth, scopeEmpresaId, async (req, res) => {
   const { id } = req.params;
-  const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle } = req.body;
+  const { num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, empresa_id, alergias, alergias_detalle, curp, rfc } = req.body;
   try {
     await queryRun(
       `UPDATE pacientes
-       SET num_empleado = $1, nombre = $2, fecha_nac = $3, nss = $4, contacto_emergencia = $5, puesto = $6, area = $7, supervisor = $8, alergias = $9, alergias_detalle = $10
-       WHERE id = $11 AND empresa_id = $12`,
-      [num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, alergias, alergias_detalle, id, empresa_id]
+       SET num_empleado = $1, nombre = $2, fecha_nac = $3, nss = $4, contacto_emergencia = $5, puesto = $6, area = $7, supervisor = $8, alergias = $9, alergias_detalle = $10, curp = $11, rfc = $12
+       WHERE id = $13 AND empresa_id = $14`,
+      [num_empleado, nombre, fecha_nac, nss, contacto_emergencia, puesto, area, supervisor, alergias, alergias_detalle, curp || null, rfc || null, id, empresa_id]
     );
     res.json({ message: 'Paciente actualizado correctamente' });
   } catch (error) {

@@ -175,6 +175,8 @@ function App() {
     nombre: '',
     fecha_nac: '',
     nss: '',
+    curp: '',
+    rfc: '',
     contacto_emergencia: '',
     puesto: '',
     area: '',
@@ -524,9 +526,10 @@ function App() {
   }, [busquedaPaciente]);
 
   const handleChange = (e) => {
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: (name === 'curp' || name === 'rfc') ? value.toUpperCase() : value
     });
   };
 
@@ -544,6 +547,8 @@ function App() {
         nombre: '',
         fecha_nac: '',
         nss: '',
+        curp: '',
+        rfc: '',
         contacto_emergencia: '',
         puesto: '',
         area: '',
@@ -576,6 +581,8 @@ function App() {
       nombre: paciente.nombre,
       fecha_nac: paciente.fecha_nac || '',
       nss: paciente.nss || '',
+      curp: paciente.curp || '',
+      rfc: paciente.rfc || '',
       contacto_emergencia: paciente.contacto_emergencia || '',
       puesto: paciente.puesto || '',
       area: paciente.area || '',
@@ -601,6 +608,8 @@ function App() {
         nombre: '',
         fecha_nac: '',
         nss: '',
+        curp: '',
+        rfc: '',
         contacto_emergencia: '',
         puesto: '',
         area: '',
@@ -1956,6 +1965,8 @@ function App() {
       'Nombre': p.nombre,
       'Fecha Nacimiento': p.fecha_nac || '',
       'NSS': p.nss || '',
+      'CURP': p.curp || '',
+      'RFC': p.rfc || '',
       'Contacto Emergencia': p.contacto_emergencia || '',
       'Puesto': p.puesto || '',
       'Área': p.area || '',
@@ -1967,9 +1978,10 @@ function App() {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(datos);
     XLSX.utils.book_append_sheet(wb, ws, 'Pacientes');
-    
+
     const colWidths = [
       { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 15 },
+      { wch: 20 }, { wch: 15 },
       { wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 20 },
       { wch: 12 }, { wch: 25 }
     ];
@@ -1984,7 +1996,7 @@ function App() {
   const descargarPlantillaPacientes = () => {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([
-      ['Nombre', 'Número de Empleado', 'Fecha Nacimiento', 'NSS', 'Contacto de Emergencia', 'Puesto', 'Área', 'Supervisor']
+      ['Nombre', 'Número de Empleado', 'Fecha Nacimiento', 'NSS', 'CURP', 'RFC', 'Contacto de Emergencia', 'Puesto', 'Área', 'Supervisor']
     ]);
     XLSX.utils.book_append_sheet(wb, ws, 'Pacientes');
     XLSX.writeFile(wb, 'Plantilla_Pacientes.xlsx');
@@ -2004,6 +2016,8 @@ function App() {
           num_empleado: fila['Número de Empleado'] ? String(fila['Número de Empleado']) : '',
           fecha_nac: fila['Fecha Nacimiento'] || '',
           nss: fila['NSS'] ? String(fila['NSS']) : '',
+          curp: fila['CURP'] ? String(fila['CURP']).toUpperCase() : '',
+          rfc: fila['RFC'] ? String(fila['RFC']).toUpperCase() : '',
           contacto_emergencia: fila['Contacto de Emergencia'] || '',
           puesto: fila['Puesto'] || '',
           area: fila['Área'] || '',
@@ -2759,6 +2773,8 @@ function App() {
               <input name="nombre" placeholder="Nombre completo" value={formData.nombre} onChange={handleChange} style={styles.cardInput} required />
               <input name="fecha_nac" placeholder="Fecha nacimiento (YYYY-MM-DD)" value={formData.fecha_nac} onChange={handleChange} style={styles.cardInput} />
               <input name="nss" placeholder="NSS" value={formData.nss} onChange={handleChange} style={styles.cardInput} />
+              <input name="curp" placeholder="CURP" value={formData.curp} onChange={handleChange} style={{ ...styles.cardInput, textTransform: 'uppercase' }} maxLength={18} />
+              <input name="rfc" placeholder="RFC" value={formData.rfc} onChange={handleChange} style={{ ...styles.cardInput, textTransform: 'uppercase' }} maxLength={13} />
               <input name="contacto_emergencia" placeholder="Contacto de emergencia" value={formData.contacto_emergencia} onChange={handleChange} style={styles.cardInput} />
               <input name="puesto" placeholder="Puesto" value={formData.puesto} onChange={handleChange} style={styles.cardInput} />
               <input name="area" placeholder="Área" value={formData.area} onChange={handleChange} style={styles.cardInput} />
@@ -2787,7 +2803,7 @@ function App() {
             </div>
             <input
               type="text"
-              placeholder="Buscar por nombre, número de empleado o área..."
+              placeholder="Buscar por nombre, número de empleado, área, CURP o RFC..."
               value={busquedaPaciente}
               onChange={(e) => setBusquedaPaciente(e.target.value)}
               style={styles.cardInput}
@@ -3961,6 +3977,8 @@ function App() {
                 <input name="nombre" placeholder="Nombre completo" value={formData.nombre} onChange={handleChange} style={styles.cardInput} required />
                 <input name="fecha_nac" placeholder="Fecha nacimiento (YYYY-MM-DD)" value={formData.fecha_nac} onChange={handleChange} style={styles.cardInput} />
                 <input name="nss" placeholder="NSS" value={formData.nss} onChange={handleChange} style={styles.cardInput} />
+                <input name="curp" placeholder="CURP" value={formData.curp} onChange={handleChange} style={{ ...styles.cardInput, textTransform: 'uppercase' }} maxLength={18} />
+                <input name="rfc" placeholder="RFC" value={formData.rfc} onChange={handleChange} style={{ ...styles.cardInput, textTransform: 'uppercase' }} maxLength={13} />
                 <input name="contacto_emergencia" placeholder="Contacto de emergencia" value={formData.contacto_emergencia} onChange={handleChange} style={styles.cardInput} />
                 <input name="puesto" placeholder="Puesto" value={formData.puesto} onChange={handleChange} style={styles.cardInput} />
                 <input name="area" placeholder="Área" value={formData.area} onChange={handleChange} style={styles.cardInput} />

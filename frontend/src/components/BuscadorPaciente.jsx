@@ -104,7 +104,7 @@ function BuscadorPaciente({ apiUrl, empresaId, token, pacienteSeleccionado, onSe
             value={busqueda}
             onFocus={() => setAbierto(true)}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar paciente por nombre..."
+            placeholder="Buscar paciente por nombre, CURP o RFC..."
             style={{
               display: 'block',
               width: '100%',

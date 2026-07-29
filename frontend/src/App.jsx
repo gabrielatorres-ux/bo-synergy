@@ -331,6 +331,55 @@ function App() {
   const [altoRiesgoBusqueda, setAltoRiesgoBusqueda] = useState('');
   const [altoRiesgoLog, setAltoRiesgoLog] = useState([]);
 
+  // ===== NOM-035 (riesgo psicosocial) =====
+  // El banco de preguntas y los rangos de riesgo son contenido de EJEMPLO
+  // (ver backend/migrations/011_nom035.sql) — no el cuestionario oficial
+  // de la STPS. No usar para acreditar cumplimiento real todavía.
+  const [nom035SubVista, setNom035SubVista] = useState('campanas');
+  const [nom035Campanas, setNom035Campanas] = useState([]);
+  const [nom035CampanaForm, setNom035CampanaForm] = useState({ nombre: '', guia: 'III', fecha_inicio: new Date().toISOString().split('T')[0] });
+  const [nom035CuestionarioCampanaId, setNom035CuestionarioCampanaId] = useState('');
+  const [nom035CuestionarioPaciente, setNom035CuestionarioPaciente] = useState(null);
+  const [nom035Preguntas, setNom035Preguntas] = useState([]);
+  const [nom035Respuestas, setNom035Respuestas] = useState({});
+  const [nom035ResultadosCampanaId, setNom035ResultadosCampanaId] = useState('');
+  const [nom035ResultadosAgregados, setNom035ResultadosAgregados] = useState([]);
+  const [nom035ResultadoPaciente, setNom035ResultadoPaciente] = useState(null);
+  const [nom035ResultadoIndividual, setNom035ResultadoIndividual] = useState([]);
+  const [nom035EventoPaciente, setNom035EventoPaciente] = useState(null);
+  const [nom035EventoForm, setNom035EventoForm] = useState({ fecha: new Date().toISOString().split('T')[0], tipo_evento: 'accidente_grave', descripcion: '', atencion_brindada: '' });
+  const [nom035Eventos, setNom035Eventos] = useState([]);
+  const [nom035PlanForm, setNom035PlanForm] = useState({ campana_id: '', dominio: 'Ambiente de trabajo', accion: '', responsable: '', fecha_compromiso: '' });
+  const [nom035PlanAccion, setNom035PlanAccion] = useState([]);
+
+  const ETIQUETAS_GUIA_NOM035 = {
+    I: 'Guía I (hasta 15 trabajadores)',
+    II: 'Guía II (16 a 50 trabajadores)',
+    III: 'Guía III (más de 50 trabajadores)'
+  };
+  const ETIQUETAS_TIPO_EVENTO_TRAUMATICO = {
+    accidente_grave: 'Accidente grave',
+    asalto: 'Asalto',
+    violencia: 'Violencia laboral',
+    desastre: 'Desastre natural',
+    otro: 'Otro'
+  };
+  const ETIQUETAS_CATEGORIA_RIESGO = {
+    nulo: 'Nulo',
+    bajo: 'Bajo',
+    medio: 'Medio',
+    alto: 'Alto',
+    muy_alto: 'Muy alto'
+  };
+  const DOMINIOS_NOM035 = ['Ambiente de trabajo', 'Carga de trabajo', 'Organización del tiempo de trabajo', 'Liderazgo y relaciones en el trabajo', 'Violencia laboral'];
+  const OPCIONES_RESPUESTA_NOM035 = [
+    { valor: 0, etiqueta: 'Nunca' },
+    { valor: 1, etiqueta: 'Casi nunca' },
+    { valor: 2, etiqueta: 'Algunas veces' },
+    { valor: 3, etiqueta: 'Casi siempre' },
+    { valor: 4, etiqueta: 'Siempre' }
+  ];
+
   const hoy = new Date();
   const [agendaActividades, setAgendaActividades] = useState([]);
   const [agendaMes, setAgendaMes] = useState(hoy.getMonth());
@@ -1673,6 +1722,198 @@ function App() {
     toast.success(`${altoRiesgoLog.length} registros exportados correctamente`);
   };
 
+  // ===== NOM-035 (riesgo psicosocial) =====
+  const cargarNom035Campanas = async () => {
+    try {
+      const response = await api.get(`${API_URL}/nom035/campanas`);
+      setNom035Campanas(response.data);
+    } catch (error) {
+      console.error('Error al cargar campañas NOM-035:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (subVistaConsultas === 'nom035' && nom035SubVista === 'campanas' && usuario) {
+      cargarNom035Campanas();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subVistaConsultas, nom035SubVista, usuario]);
+
+  const handleCrearCampanaNom035 = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post(`${API_URL}/nom035/campanas`, nom035CampanaForm);
+      toast.success('Campaña creada correctamente');
+      setNom035CampanaForm({ nombre: '', guia: 'III', fecha_inicio: new Date().toISOString().split('T')[0] });
+      cargarNom035Campanas();
+    } catch (error) {
+      toast.error('Error al crear la campaña');
+    }
+  };
+
+  const handleCerrarCampanaNom035 = async (id) => {
+    try {
+      await api.patch(`${API_URL}/nom035/campanas/${id}`, { estado: 'cerrada' });
+      toast.success('Campaña cerrada');
+      cargarNom035Campanas();
+    } catch (error) {
+      toast.error('Error al cerrar la campaña');
+    }
+  };
+
+  // Cuestionario: cuando se elige campaña + trabajador, carga las
+  // preguntas de la guía de esa campaña y las respuestas ya guardadas.
+  useEffect(() => {
+    const campana = nom035Campanas.find(c => String(c.id) === String(nom035CuestionarioCampanaId));
+    if (!campana) {
+      setNom035Preguntas([]);
+      return;
+    }
+    api.get(`${API_URL}/nom035/preguntas`, { params: { guia: campana.guia } })
+      .then((response) => setNom035Preguntas(response.data))
+      .catch(() => setNom035Preguntas([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nom035CuestionarioCampanaId, nom035Campanas]);
+
+  useEffect(() => {
+    if (!nom035CuestionarioCampanaId || !nom035CuestionarioPaciente) {
+      setNom035Respuestas({});
+      return;
+    }
+    api.get(`${API_URL}/nom035/respuestas/${nom035CuestionarioCampanaId}/${nom035CuestionarioPaciente.id}`)
+      .then((response) => {
+        const mapa = {};
+        response.data.forEach(r => { mapa[r.pregunta_id] = r.valor; });
+        setNom035Respuestas(mapa);
+      })
+      .catch(() => setNom035Respuestas({}));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nom035CuestionarioCampanaId, nom035CuestionarioPaciente]);
+
+  const handleGuardarRespuestasNom035 = async (e) => {
+    e.preventDefault();
+    if (!nom035CuestionarioCampanaId || !nom035CuestionarioPaciente) {
+      toast.error('Selecciona una campaña y un trabajador');
+      return;
+    }
+    if (Object.keys(nom035Respuestas).length < nom035Preguntas.length) {
+      toast.error('Responde todas las preguntas antes de guardar');
+      return;
+    }
+    try {
+      await api.post(`${API_URL}/nom035/respuestas`, {
+        campana_id: nom035CuestionarioCampanaId,
+        paciente_id: nom035CuestionarioPaciente.id,
+        respuestas: Object.entries(nom035Respuestas).map(([pregunta_id, valor]) => ({ pregunta_id: Number(pregunta_id), valor }))
+      });
+      toast.success('Cuestionario guardado correctamente');
+    } catch (error) {
+      toast.error('Error al guardar el cuestionario');
+    }
+  };
+
+  useEffect(() => {
+    if (!nom035ResultadosCampanaId) {
+      setNom035ResultadosAgregados([]);
+      return;
+    }
+    api.get(`${API_URL}/nom035/resultados`, { params: { campana_id: nom035ResultadosCampanaId } })
+      .then((response) => setNom035ResultadosAgregados(response.data))
+      .catch(() => setNom035ResultadosAgregados([]));
+  }, [nom035ResultadosCampanaId]);
+
+  useEffect(() => {
+    if (!nom035ResultadosCampanaId || !nom035ResultadoPaciente) {
+      setNom035ResultadoIndividual([]);
+      return;
+    }
+    api.get(`${API_URL}/nom035/resultados/${nom035ResultadosCampanaId}/${nom035ResultadoPaciente.id}`)
+      .then((response) => setNom035ResultadoIndividual(response.data))
+      .catch(() => setNom035ResultadoIndividual([]));
+  }, [nom035ResultadosCampanaId, nom035ResultadoPaciente]);
+
+  const cargarNom035Eventos = async () => {
+    try {
+      const response = await api.get(`${API_URL}/nom035/eventos-traumaticos`);
+      setNom035Eventos(response.data);
+    } catch (error) {
+      console.error('Error al cargar eventos traumáticos:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (subVistaConsultas === 'nom035' && nom035SubVista === 'eventos' && usuario) {
+      cargarNom035Eventos();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subVistaConsultas, nom035SubVista, usuario]);
+
+  const handleGuardarEventoTraumatico = async (e) => {
+    e.preventDefault();
+    if (!nom035EventoPaciente) {
+      toast.error('Selecciona un trabajador');
+      return;
+    }
+    try {
+      await api.post(`${API_URL}/nom035/eventos-traumaticos`, {
+        paciente_id: nom035EventoPaciente.id,
+        ...nom035EventoForm
+      });
+      toast.success('Evento registrado correctamente');
+      setNom035EventoPaciente(null);
+      setNom035EventoForm({ fecha: new Date().toISOString().split('T')[0], tipo_evento: 'accidente_grave', descripcion: '', atencion_brindada: '' });
+      cargarNom035Eventos();
+    } catch (error) {
+      toast.error('Error al registrar el evento');
+    }
+  };
+
+  const handleActualizarEstadoEvento = async (id, estado) => {
+    try {
+      await api.patch(`${API_URL}/nom035/eventos-traumaticos/${id}`, { estado });
+      cargarNom035Eventos();
+    } catch (error) {
+      toast.error('Error al actualizar el evento');
+    }
+  };
+
+  const cargarNom035PlanAccion = async () => {
+    try {
+      const response = await api.get(`${API_URL}/nom035/plan-accion`);
+      setNom035PlanAccion(response.data);
+    } catch (error) {
+      console.error('Error al cargar el plan de acción:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (subVistaConsultas === 'nom035' && nom035SubVista === 'plan_accion' && usuario) {
+      cargarNom035PlanAccion();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subVistaConsultas, nom035SubVista, usuario]);
+
+  const handleGuardarPlanAccion = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post(`${API_URL}/nom035/plan-accion`, nom035PlanForm);
+      toast.success('Acción registrada correctamente');
+      setNom035PlanForm({ campana_id: '', dominio: 'Ambiente de trabajo', accion: '', responsable: '', fecha_compromiso: '' });
+      cargarNom035PlanAccion();
+    } catch (error) {
+      toast.error('Error al registrar la acción');
+    }
+  };
+
+  const handleActualizarEstatusPlan = async (id, estatus) => {
+    try {
+      await api.patch(`${API_URL}/nom035/plan-accion/${id}`, { estatus });
+      cargarNom035PlanAccion();
+    } catch (error) {
+      toast.error('Error al actualizar la acción');
+    }
+  };
+
   // ===== MI AGENDA =====
   const cargarAgenda = async () => {
     if (!usuario) return;
@@ -2739,6 +2980,7 @@ function App() {
             { id: 'restricciones', label: 'Restricciones' },
             { id: 'accidentes', label: 'Accidentes' },
             { id: 'alto_riesgo', label: 'Alto Riesgo' },
+            { id: 'nom035', label: 'NOM-035' },
           ].map(item => (
             <button
               key={item.id}
@@ -3500,6 +3742,393 @@ function App() {
             )}
           </div>
         </div>
+        )}
+
+        {subVistaConsultas === 'nom035' && (
+        <>
+        <div style={{ ...styles.errorBox, marginBottom: '16px' }}>
+          El cuestionario y los rangos de riesgo que ves aquí son <strong>contenido de ejemplo</strong>,
+          no el texto oficial de la Guía de Referencia de la STPS. No usar todavía para acreditar
+          cumplimiento real de NOM-035.
+        </div>
+        <div style={styles.subNav}>
+          {[
+            { id: 'campanas', label: 'Campañas' },
+            { id: 'cuestionario', label: 'Cuestionario' },
+            { id: 'resultados', label: 'Resultados' },
+            { id: 'eventos', label: 'Eventos Traumáticos' },
+            { id: 'plan_accion', label: 'Plan de Acción' },
+          ].map(item => (
+            <button
+              key={item.id}
+              onClick={() => setNom035SubVista(item.id)}
+              style={nom035SubVista === item.id ? styles.subNavButtonActive : styles.subNavButton}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {nom035SubVista === 'campanas' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Nueva campaña</h3>
+            </div>
+            <form onSubmit={handleCrearCampanaNom035} style={styles.cardForm}>
+              <input
+                placeholder="Nombre de la campaña"
+                value={nom035CampanaForm.nombre}
+                onChange={(e) => setNom035CampanaForm({ ...nom035CampanaForm, nombre: e.target.value })}
+                style={styles.cardInput}
+                required
+              />
+              <label style={styles.inlineLabel}>
+                Guía aplicable
+                <select
+                  value={nom035CampanaForm.guia}
+                  onChange={(e) => setNom035CampanaForm({ ...nom035CampanaForm, guia: e.target.value })}
+                  style={styles.cardInput}
+                >
+                  {Object.entries(ETIQUETAS_GUIA_NOM035).map(([valor, etiqueta]) => (
+                    <option key={valor} value={valor}>{etiqueta}</option>
+                  ))}
+                </select>
+              </label>
+              <input
+                type="date"
+                value={nom035CampanaForm.fecha_inicio}
+                onChange={(e) => setNom035CampanaForm({ ...nom035CampanaForm, fecha_inicio: e.target.value })}
+                style={styles.cardInput}
+                required
+              />
+              <button type="submit" style={styles.saveButton}>Crear campaña</button>
+            </form>
+          </div>
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Campañas registradas</h3>
+            </div>
+            {nom035Campanas.length === 0 ? (
+              <p style={styles.emptyText}>No hay campañas aún</p>
+            ) : (
+              <ul style={styles.patientList}>
+                {nom035Campanas.map(c => (
+                  <li key={c.id} style={styles.patientItem}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div>
+                        <strong>{c.nombre}</strong>
+                        <span style={styles.patientInfo}>
+                          {ETIQUETAS_GUIA_NOM035[c.guia]} · Inicio: {new Date(c.fecha_inicio).toLocaleDateString('es-MX')} · {c.estado === 'abierta' ? 'Abierta' : 'Cerrada'}
+                        </span>
+                      </div>
+                      {c.estado === 'abierta' && (
+                        <button onClick={() => handleCerrarCampanaNom035(c.id)} style={styles.deleteButton}>Cerrar</button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        )}
+
+        {nom035SubVista === 'cuestionario' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Aplicar cuestionario</h3>
+            </div>
+            <label style={styles.inlineLabel}>
+              Campaña
+              <select value={nom035CuestionarioCampanaId} onChange={(e) => setNom035CuestionarioCampanaId(e.target.value)} style={styles.cardInput}>
+                <option value="">Selecciona una campaña</option>
+                {nom035Campanas.filter(c => c.estado === 'abierta').map(c => (
+                  <option key={c.id} value={c.id}>{c.nombre}</option>
+                ))}
+              </select>
+            </label>
+            <BuscadorPaciente
+              apiUrl={API_URL}
+              empresaId={usuario?.empresa_id}
+              token={usuario?.token}
+              pacienteSeleccionado={nom035CuestionarioPaciente}
+              onSeleccionar={setNom035CuestionarioPaciente}
+            />
+            {!nom035CuestionarioCampanaId || !nom035CuestionarioPaciente ? (
+              <p style={styles.emptyText}>Elige una campaña y un trabajador para empezar.</p>
+            ) : (
+              <form onSubmit={handleGuardarRespuestasNom035} style={styles.cardForm}>
+                {DOMINIOS_NOM035.map(dominio => (
+                  <div key={dominio} style={{ marginTop: '16px' }}>
+                    <p style={{ fontFamily: fontDisplay, fontSize: '15px', color: ink, marginBottom: '8px' }}>{dominio}</p>
+                    {nom035Preguntas.filter(p => p.dominio === dominio).map(p => (
+                      <label key={p.id} style={{ display: 'block', marginBottom: '10px' }}>
+                        <span style={{ display: 'block', fontSize: '14px', color: ink, marginBottom: '4px' }}>{p.texto}</span>
+                        <select
+                          value={nom035Respuestas[p.id] ?? ''}
+                          onChange={(e) => setNom035Respuestas({ ...nom035Respuestas, [p.id]: Number(e.target.value) })}
+                          style={styles.cardInput}
+                          required
+                        >
+                          <option value="" disabled>Selecciona una respuesta</option>
+                          {OPCIONES_RESPUESTA_NOM035.map(o => (
+                            <option key={o.valor} value={o.valor}>{o.etiqueta}</option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                ))}
+                <button type="submit" style={styles.saveButton}>Guardar cuestionario</button>
+              </form>
+            )}
+          </div>
+        </div>
+        )}
+
+        {nom035SubVista === 'resultados' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Resultado agregado de la campaña</h3>
+            </div>
+            <label style={styles.inlineLabel}>
+              Campaña
+              <select value={nom035ResultadosCampanaId} onChange={(e) => setNom035ResultadosCampanaId(e.target.value)} style={styles.cardInput}>
+                <option value="">Selecciona una campaña</option>
+                {nom035Campanas.map(c => (
+                  <option key={c.id} value={c.id}>{c.nombre}</option>
+                ))}
+              </select>
+            </label>
+            {nom035ResultadosCampanaId && (
+              nom035ResultadosAgregados.length === 0 ? (
+                <p style={styles.emptyText}>Todavía no hay resultados calculados para esta campaña</p>
+              ) : (
+                <ul style={styles.patientList}>
+                  {nom035ResultadosAgregados.map((r, i) => (
+                    <li key={i} style={styles.patientItem}>
+                      <strong>{r.dominio}</strong>
+                      <span style={styles.patientInfo}>
+                        {ETIQUETAS_CATEGORIA_RIESGO[r.categoria_riesgo] || r.categoria_riesgo} · {r.total} trabajador(es)
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )
+            )}
+          </div>
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Resultado individual (seguimiento clínico)</h3>
+            </div>
+            <BuscadorPaciente
+              apiUrl={API_URL}
+              empresaId={usuario?.empresa_id}
+              token={usuario?.token}
+              pacienteSeleccionado={nom035ResultadoPaciente}
+              onSeleccionar={setNom035ResultadoPaciente}
+            />
+            {nom035ResultadosCampanaId && nom035ResultadoPaciente && (
+              nom035ResultadoIndividual.length === 0 ? (
+                <p style={styles.emptyText}>Este trabajador aún no tiene resultados en esta campaña</p>
+              ) : (
+                <ul style={styles.patientList}>
+                  {nom035ResultadoIndividual.map((r, i) => (
+                    <li key={i} style={styles.patientItem}>
+                      <strong>{r.dominio}</strong>
+                      <span style={styles.patientInfo}>
+                        {ETIQUETAS_CATEGORIA_RIESGO[r.categoria_riesgo] || r.categoria_riesgo} · Puntaje: {r.puntaje}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )
+            )}
+          </div>
+        </div>
+        )}
+
+        {nom035SubVista === 'eventos' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Registrar acontecimiento traumático severo</h3>
+            </div>
+            <form onSubmit={handleGuardarEventoTraumatico} style={styles.cardForm}>
+              <BuscadorPaciente
+                apiUrl={API_URL}
+                empresaId={usuario?.empresa_id}
+                token={usuario?.token}
+                pacienteSeleccionado={nom035EventoPaciente}
+                onSeleccionar={setNom035EventoPaciente}
+              />
+              <input
+                type="date"
+                value={nom035EventoForm.fecha}
+                onChange={(e) => setNom035EventoForm({ ...nom035EventoForm, fecha: e.target.value })}
+                style={styles.cardInput}
+                required
+              />
+              <label style={styles.inlineLabel}>
+                Tipo de evento
+                <select
+                  value={nom035EventoForm.tipo_evento}
+                  onChange={(e) => setNom035EventoForm({ ...nom035EventoForm, tipo_evento: e.target.value })}
+                  style={styles.cardInput}
+                >
+                  {Object.entries(ETIQUETAS_TIPO_EVENTO_TRAUMATICO).map(([valor, etiqueta]) => (
+                    <option key={valor} value={valor}>{etiqueta}</option>
+                  ))}
+                </select>
+              </label>
+              <textarea
+                placeholder="Descripción"
+                value={nom035EventoForm.descripcion}
+                onChange={(e) => setNom035EventoForm({ ...nom035EventoForm, descripcion: e.target.value })}
+                rows="3"
+                style={styles.cardInput}
+              />
+              <textarea
+                placeholder="Atención brindada / canalización"
+                value={nom035EventoForm.atencion_brindada}
+                onChange={(e) => setNom035EventoForm({ ...nom035EventoForm, atencion_brindada: e.target.value })}
+                rows="3"
+                style={styles.cardInput}
+              />
+              <button type="submit" style={styles.saveButton}>Guardar evento</button>
+            </form>
+          </div>
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Eventos registrados</h3>
+            </div>
+            {nom035Eventos.length === 0 ? (
+              <p style={styles.emptyText}>No hay eventos registrados aún</p>
+            ) : (
+              <ul style={styles.patientList}>
+                {nom035Eventos.map(ev => (
+                  <li key={ev.id} style={styles.patientItem}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div>
+                        <strong>{ev.paciente_nombre}</strong>
+                        <span style={styles.patientInfo}>
+                          {new Date(ev.fecha).toLocaleDateString('es-MX')} · {ETIQUETAS_TIPO_EVENTO_TRAUMATICO[ev.tipo_evento] || ev.tipo_evento} · Área: {ev.paciente_area || '—'} · Estado: {ev.estado}
+                        </span>
+                      </div>
+                      {ev.estado !== 'cerrado' && (
+                        <select
+                          value={ev.estado}
+                          onChange={(e) => handleActualizarEstadoEvento(ev.id, e.target.value)}
+                          style={{ ...styles.cardInput, width: 'auto' }}
+                        >
+                          <option value="abierto">Abierto</option>
+                          <option value="en_seguimiento">En seguimiento</option>
+                          <option value="cerrado">Cerrado</option>
+                        </select>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        )}
+
+        {nom035SubVista === 'plan_accion' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Nueva acción</h3>
+            </div>
+            <form onSubmit={handleGuardarPlanAccion} style={styles.cardForm}>
+              <label style={styles.inlineLabel}>
+                Campaña (opcional)
+                <select
+                  value={nom035PlanForm.campana_id}
+                  onChange={(e) => setNom035PlanForm({ ...nom035PlanForm, campana_id: e.target.value })}
+                  style={styles.cardInput}
+                >
+                  <option value="">Sin campaña asociada</option>
+                  {nom035Campanas.map(c => (
+                    <option key={c.id} value={c.id}>{c.nombre}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={styles.inlineLabel}>
+                Dominio
+                <select
+                  value={nom035PlanForm.dominio}
+                  onChange={(e) => setNom035PlanForm({ ...nom035PlanForm, dominio: e.target.value })}
+                  style={styles.cardInput}
+                >
+                  {[...DOMINIOS_NOM035, 'GENERAL'].map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </label>
+              <textarea
+                placeholder="Acción a implementar"
+                value={nom035PlanForm.accion}
+                onChange={(e) => setNom035PlanForm({ ...nom035PlanForm, accion: e.target.value })}
+                rows="3"
+                style={styles.cardInput}
+                required
+              />
+              <input
+                placeholder="Responsable"
+                value={nom035PlanForm.responsable}
+                onChange={(e) => setNom035PlanForm({ ...nom035PlanForm, responsable: e.target.value })}
+                style={styles.cardInput}
+              />
+              <input
+                type="date"
+                placeholder="Fecha compromiso"
+                value={nom035PlanForm.fecha_compromiso}
+                onChange={(e) => setNom035PlanForm({ ...nom035PlanForm, fecha_compromiso: e.target.value })}
+                style={styles.cardInput}
+              />
+              <button type="submit" style={styles.saveButton}>Guardar acción</button>
+            </form>
+          </div>
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Plan de acción</h3>
+            </div>
+            {nom035PlanAccion.length === 0 ? (
+              <p style={styles.emptyText}>No hay acciones registradas aún</p>
+            ) : (
+              <ul style={styles.patientList}>
+                {nom035PlanAccion.map(p => (
+                  <li key={p.id} style={styles.patientItem}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div>
+                        <strong>{p.dominio}</strong>
+                        <span style={styles.patientInfo}>
+                          {p.accion} {p.responsable ? `· Responsable: ${p.responsable}` : ''} {p.fecha_compromiso ? `· Compromiso: ${new Date(p.fecha_compromiso).toLocaleDateString('es-MX')}` : ''}
+                        </span>
+                      </div>
+                      <select
+                        value={p.estatus}
+                        onChange={(e) => handleActualizarEstatusPlan(p.id, e.target.value)}
+                        style={{ ...styles.cardInput, width: 'auto' }}
+                      >
+                        <option value="pendiente">Pendiente</option>
+                        <option value="en_proceso">En proceso</option>
+                        <option value="completado">Completado</option>
+                      </select>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        )}
+        </>
         )}
         </>
         )}

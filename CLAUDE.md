@@ -12,7 +12,7 @@ completo y, si hace falta más detalle, revisa `backend/server.js`,
 `backend/migrations/` y `frontend/src/App.jsx` directamente. No rediseñes
 nada que ya funcione sin que te lo pidan explícitamente.
 
-## Estado actual (2026-07-27)
+## Estado actual (2026-07-29)
 
 ### Arquitectura
 
@@ -30,7 +30,7 @@ nada que ya funcione sin que te lo pidan explícitamente.
   autenticadas vía `req.db.query`/`req.db.queryOne`/`req.db.queryRun` —
   ver "Aislamiento a nivel de base de datos" abajo. Sin ORM.
 - **Base de datos**: Postgres en Supabase. Las migraciones viven en
-  `backend/migrations/` como archivos `.sql` numerados (`001` a `010`), y
+  `backend/migrations/` como archivos `.sql` numerados (`001` a `011`), y
   se aplican a mano contra producción con un script `node -e` de una sola
   vez — no hay un runner de migraciones. Antes de la convención numerada
   ya existían las tablas base (`pacientes`, `consultas`, `usuarios`)
@@ -133,6 +133,22 @@ RLS con ese rol no habría protegido nada.
 - **Indicadores**: dashboard de estadísticas (`Dashboard.jsx`) — total de
   pacientes/consultas/exámenes, top motivos, top áreas, consultas por
   mes, pacientes por área.
+- **NOM-035 (riesgo psicosocial)**: campañas de evaluación por empresa
+  (guía I/II/III según tamaño), cuestionario por trabajador agrupado por
+  dominio, motor de calificación automático (con reversión de reactivos
+  inversos) que categoriza el riesgo por dominio y general, resultado
+  agregado (conteos, nunca identificado por nombre) y resultado
+  individual para seguimiento clínico, registro de acontecimientos
+  traumáticos severos con estado de seguimiento, y plan de acción
+  correctivo. **Importante**: el banco de preguntas y las tablas de
+  rangos de riesgo (`nom035_preguntas`, `nom035_rangos_riesgo`,
+  sembradas en `011_nom035.sql`) son **contenido de ejemplo**, no el
+  texto oficial de la Guía de Referencia de la STPS ni sus puntos de
+  corte reales (`nom035_preguntas.es_oficial` está en `false`) — son
+  datos, no código, precisamente para poder reemplazarlas sin tocar el
+  backend.
+  No usar este módulo para acreditar cumplimiento real de NOM-035 hasta
+  sustituir ese contenido y validarlo con el área legal/de cumplimiento.
 
 ### Lo que NO existe todavía (gaps reales, no inventar que sí)
 
@@ -141,12 +157,14 @@ RLS con ese rol no habría protegido nada.
   documentada, ERD) como entregables — el sistema se construyó módulo por
   módulo directamente en código.
 - **Módulos normativos dedicados**: NOM-019 (comisión de seguridad e
-  higiene), NOM-030 (servicios de salud en el trabajo), NOM-035 (riesgo
-  psicosocial), NOM-036 (riesgo ergonómico), NOM-017 (EPP), campañas
-  preventivas, investigación formal de accidentes (hoy solo hay un
-  registro/log, no un flujo de investigación), vigilancia epidemiológica,
-  y dictámenes de aptitud como documento formal (hoy es solo un campo de
-  texto `constancia_aptitud` dentro de una consulta).
+  higiene), NOM-030 (servicios de salud en el trabajo), NOM-036 (riesgo
+  ergonómico), NOM-017 (EPP), campañas preventivas, investigación formal
+  de accidentes (hoy solo hay un registro/log, no un flujo de
+  investigación), vigilancia epidemiológica, y dictámenes de aptitud
+  como documento formal (hoy es solo un campo de texto
+  `constancia_aptitud` dentro de una consulta). NOM-035 ya tiene
+  infraestructura construida (ver arriba) pero con contenido de ejemplo,
+  no listo para cumplimiento real todavía.
 - **Copiloto de IA**: no hay ninguna dependencia de IA en `package.json`
   ni código relacionado. Cero funcionalidad de IA implementada.
 - **Firma electrónica con trazabilidad**: el único campo "firma" que

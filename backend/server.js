@@ -1618,6 +1618,301 @@ app.delete('/api/agenda/:id', requireAuth, withDbClient, scopeUsuarioId, async (
   }
 });
 
+// ==================== NOM-035 (RIESGO PSICOSOCIAL) ====================
+// IMPORTANTE: nom035_preguntas y nom035_rangos_riesgo contienen contenido
+// de EJEMPLO (ver migración 011_nom035.sql), no el texto oficial de la
+// Guía de Referencia de la STPS. No usar para acreditar cumplimiento real
+// hasta sustituir ese contenido.
+
+// Catálogo de preguntas (no es dato de empresa, cualquier usuario
+// autenticado puede leerlo).
+app.get('/api/nom035/preguntas', requireAuth, withDbClient, async (req, res) => {
+  try {
+    const { guia } = req.query;
+    if (!guia) {
+      return res.status(400).json({ error: 'Se requiere la guía (I, II o III)' });
+    }
+    const result = await req.db.query(
+      'SELECT id, guia, dominio, texto, orden FROM nom035_preguntas WHERE guia = $1 ORDER BY dominio, orden',
+      [guia]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/nom035/campanas', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
+  try {
+    const { empresa_id } = req.query;
+    const result = await req.db.query(
+      'SELECT * FROM nom035_campanas WHERE empresa_id = $1 ORDER BY fecha_inicio DESC',
+      [empresa_id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/nom035/campanas', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
+  const { empresa_id, nombre, guia, fecha_inicio } = req.body;
+  if (!nombre || !guia || !fecha_inicio) {
+    return res.status(400).json({ error: 'Faltan campos requeridos' });
+  }
+  try {
+    const result = await req.db.queryRun(
+      `INSERT INTO nom035_campanas (empresa_id, nombre, guia, fecha_inicio, creada_por)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [empresa_id, nombre, guia, fecha_inicio, req.auth.id]
+    );
+    res.json({ id: result.rows[0]?.id, message: 'Campaña creada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/nom035/campanas/:id', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
+  const { id } = req.params;
+  const { empresa_id, estado, fecha_fin } = req.body;
+  try {
+    await req.db.queryRun(
+      'UPDATE nom035_campanas SET estado = COALESCE($1, estado), fecha_fin = COALESCE($2, fecha_fin) WHERE id = $3 AND empresa_id = $4',
+      [estado || null, fecha_fin || null, id, empresa_id]
+    );
+    res.json({ message: 'Campaña actualizada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Calcula y guarda los resultados por dominio (y GENERAL) de un
+// trabajador dentro de una campaña, a partir de sus respuestas ya
+// guardadas. Se llama después de cada envío de respuestas.
+const calcularResultadosNom035 = async (db, campanaId, pacienteId) => {
+  const campana = await db.queryOne('SELECT guia, empresa_id FROM nom035_campanas WHERE id = $1', [campanaId]);
+  if (!campana) return;
+
+  const respuestas = await db.query(
+    `SELECT r.valor, p.dominio, p.es_inverso
+     FROM nom035_respuestas r
+     JOIN nom035_preguntas p ON p.id = r.pregunta_id
+     WHERE r.campana_id = $1 AND r.paciente_id = $2`,
+    [campanaId, pacienteId]
+  );
+
+  const puntajePorDominio = {};
+  let puntajeGeneral = 0;
+  for (const fila of respuestas.rows) {
+    const valorEfectivo = fila.es_inverso ? (4 - fila.valor) : fila.valor;
+    puntajePorDominio[fila.dominio] = (puntajePorDominio[fila.dominio] || 0) + valorEfectivo;
+    puntajeGeneral += valorEfectivo;
+  }
+  puntajePorDominio['GENERAL'] = puntajeGeneral;
+
+  for (const [dominio, puntaje] of Object.entries(puntajePorDominio)) {
+    const rango = await db.queryOne(
+      'SELECT categoria_riesgo FROM nom035_rangos_riesgo WHERE guia = $1 AND dominio = $2 AND $3 BETWEEN puntaje_min AND puntaje_max',
+      [campana.guia, dominio, puntaje]
+    );
+    const categoria = rango ? rango.categoria_riesgo : 'muy_alto';
+    await db.queryRun(
+      `INSERT INTO nom035_resultados (campana_id, paciente_id, empresa_id, dominio, puntaje, categoria_riesgo)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (campana_id, paciente_id, dominio)
+       DO UPDATE SET puntaje = $5, categoria_riesgo = $6, calculado_en = NOW()`,
+      [campanaId, pacienteId, campana.empresa_id, dominio, puntaje, categoria]
+    );
+  }
+};
+
+// Guarda (o actualiza) las respuestas de un trabajador a una campaña y
+// recalcula sus resultados. Body: { campana_id, paciente_id, respuestas: [{ pregunta_id, valor }] }
+app.post('/api/nom035/respuestas', requireAuth, withDbClient, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
+  const { campana_id, paciente_id, empresa_id, respuestas } = req.body;
+  if (!campana_id || !paciente_id || !Array.isArray(respuestas) || respuestas.length === 0) {
+    return res.status(400).json({ error: 'Faltan campos requeridos' });
+  }
+  try {
+    for (const r of respuestas) {
+      await req.db.queryRun(
+        `INSERT INTO nom035_respuestas (campana_id, paciente_id, empresa_id, pregunta_id, valor)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (campana_id, paciente_id, pregunta_id)
+         DO UPDATE SET valor = $5, fecha_respuesta = NOW()`,
+        [campana_id, paciente_id, empresa_id, r.pregunta_id, r.valor]
+      );
+    }
+    await calcularResultadosNom035(req.db, campana_id, paciente_id);
+    res.json({ message: 'Respuestas guardadas correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/nom035/respuestas/:campanaId/:pacienteId', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
+  const { campanaId, pacienteId } = req.params;
+  try {
+    const result = await req.db.query(
+      'SELECT pregunta_id, valor FROM nom035_respuestas WHERE campana_id = $1 AND paciente_id = $2',
+      [campanaId, pacienteId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Resultado individual de un trabajador (para dar seguimiento clínico).
+app.get('/api/nom035/resultados/:campanaId/:pacienteId', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
+  const { campanaId, pacienteId } = req.params;
+  try {
+    const result = await req.db.query(
+      'SELECT dominio, puntaje, categoria_riesgo FROM nom035_resultados WHERE campana_id = $1 AND paciente_id = $2',
+      [campanaId, pacienteId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Resultado agregado de toda la campaña (conteo de trabajadores por
+// categoría de riesgo y dominio, nunca identificados por nombre — la
+// norma pide confidencialidad en el reporte agregado).
+app.get('/api/nom035/resultados', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
+  const { campana_id, empresa_id } = req.query;
+  if (!campana_id) {
+    return res.status(400).json({ error: 'Se requiere campana_id' });
+  }
+  try {
+    const result = await req.db.query(
+      `SELECT dominio, categoria_riesgo, COUNT(*) as total
+       FROM nom035_resultados
+       WHERE campana_id = $1 AND empresa_id = $2
+       GROUP BY dominio, categoria_riesgo
+       ORDER BY dominio, categoria_riesgo`,
+      [campana_id, empresa_id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== NOM-035: EVENTOS TRAUMÁTICOS ====================
+
+app.post('/api/nom035/eventos-traumaticos', requireAuth, withDbClient, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
+  const { paciente_id, empresa_id, fecha, tipo_evento, descripcion, atencion_brindada } = req.body;
+  if (!paciente_id || !fecha || !tipo_evento) {
+    return res.status(400).json({ error: 'Faltan campos requeridos' });
+  }
+  try {
+    const result = await req.db.queryRun(
+      `INSERT INTO nom035_eventos_traumaticos (paciente_id, empresa_id, fecha, tipo_evento, descripcion, atencion_brindada)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [paciente_id, empresa_id, fecha, tipo_evento, descripcion || null, atencion_brindada || null]
+    );
+    res.json({ id: result.rows[0]?.id, message: 'Evento registrado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/nom035/eventos-traumaticos/:pacienteId', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
+  const { pacienteId } = req.params;
+  try {
+    const result = await req.db.query(
+      'SELECT * FROM nom035_eventos_traumaticos WHERE paciente_id = $1 ORDER BY fecha DESC',
+      [pacienteId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/nom035/eventos-traumaticos', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
+  const { empresa_id } = req.query;
+  try {
+    const result = await req.db.query(
+      `SELECT e.*, p.nombre AS paciente_nombre, p.area AS paciente_area
+       FROM nom035_eventos_traumaticos e
+       JOIN pacientes p ON p.id = e.paciente_id
+       WHERE e.empresa_id = $1
+       ORDER BY e.fecha DESC`,
+      [empresa_id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/nom035/eventos-traumaticos/:id', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
+  const { id } = req.params;
+  const { empresa_id, estado, atencion_brindada } = req.body;
+  try {
+    await req.db.queryRun(
+      'UPDATE nom035_eventos_traumaticos SET estado = COALESCE($1, estado), atencion_brindada = COALESCE($2, atencion_brindada) WHERE id = $3 AND empresa_id = $4',
+      [estado || null, atencion_brindada || null, id, empresa_id]
+    );
+    res.json({ message: 'Evento actualizado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== NOM-035: PLAN DE ACCIÓN ====================
+
+app.post('/api/nom035/plan-accion', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
+  const { empresa_id, campana_id, dominio, accion, responsable, fecha_compromiso } = req.body;
+  if (!dominio || !accion) {
+    return res.status(400).json({ error: 'Faltan campos requeridos' });
+  }
+  try {
+    const result = await req.db.queryRun(
+      `INSERT INTO nom035_plan_accion (empresa_id, campana_id, dominio, accion, responsable, fecha_compromiso)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [empresa_id, campana_id || null, dominio, accion, responsable || null, fecha_compromiso || null]
+    );
+    res.json({ id: result.rows[0]?.id, message: 'Acción registrada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/nom035/plan-accion', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
+  const { empresa_id, campana_id } = req.query;
+  try {
+    const params = [empresa_id];
+    let sql = 'SELECT * FROM nom035_plan_accion WHERE empresa_id = $1';
+    if (campana_id) {
+      params.push(campana_id);
+      sql += ` AND campana_id = $${params.length}`;
+    }
+    sql += ' ORDER BY fecha_compromiso NULLS LAST, id DESC';
+    const result = await req.db.query(sql, params);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/nom035/plan-accion/:id', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
+  const { id } = req.params;
+  const { empresa_id, estatus } = req.body;
+  try {
+    await req.db.queryRun(
+      'UPDATE nom035_plan_accion SET estatus = COALESCE($1, estatus) WHERE id = $2 AND empresa_id = $3',
+      [estatus || null, id, empresa_id]
+    );
+    res.json({ message: 'Plan de acción actualizado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== INICIAR SERVIDOR ====================
 
 app.listen(PORT, () => {

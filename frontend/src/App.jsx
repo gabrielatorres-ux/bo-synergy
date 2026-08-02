@@ -380,6 +380,27 @@ function App() {
     { valor: 4, etiqueta: 'Siempre' }
   ];
 
+  // ===== NOM-036 (riesgo ergonómico — manejo manual de cargas) =====
+  // Los criterios de calificación (calcularPuntajeNom036 en el backend) y
+  // los rangos en nom036_rangos_riesgo son contenido de EJEMPLO, no las
+  // tablas ni límites oficiales de los anexos de la STPS
+  // (NOM-036-1-STPS-2018). No usar para acreditar cumplimiento real todavía.
+  const [nom036SubVista, setNom036SubVista] = useState('evaluaciones');
+  const [nom036Paciente, setNom036Paciente] = useState(null);
+  const [nom036Form, setNom036Form] = useState({ fecha: new Date().toISOString().split('T')[0], puesto: '', peso_carga_kg: '', frecuencia_por_hora: '', distancia_transporte_m: '', postura: 'neutra', duracion_jornada_horas: '', trabajador_vulnerable: false, observaciones: '' });
+  const [nom036Evaluaciones, setNom036Evaluaciones] = useState([]);
+  const [nom036HistorialPaciente, setNom036HistorialPaciente] = useState(null);
+  const [nom036Historial, setNom036Historial] = useState([]);
+  const [nom036PlanForm, setNom036PlanForm] = useState({ evaluacion_id: '', accion: '', responsable: '', fecha_compromiso: '' });
+  const [nom036PlanAccion, setNom036PlanAccion] = useState([]);
+
+  const ETIQUETAS_POSTURA_NOM036 = {
+    neutra: 'Neutra',
+    ligeramente_flexionada: 'Ligeramente flexionada/girada',
+    flexionada: 'Flexionada/girada',
+    muy_flexionada_o_girada: 'Muy flexionada o girada'
+  };
+
   const hoy = new Date();
   const [agendaActividades, setAgendaActividades] = useState([]);
   const [agendaMes, setAgendaMes] = useState(hoy.getMonth());
@@ -1914,6 +1935,97 @@ function App() {
     }
   };
 
+  // ===== NOM-036 (riesgo ergonómico) =====
+  const cargarNom036Evaluaciones = async () => {
+    try {
+      const response = await api.get(`${API_URL}/nom036/evaluaciones`);
+      setNom036Evaluaciones(response.data);
+    } catch (error) {
+      console.error('Error al cargar evaluaciones NOM-036:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (subVistaConsultas === 'nom036' && nom036SubVista === 'evaluaciones' && usuario) {
+      cargarNom036Evaluaciones();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subVistaConsultas, nom036SubVista, usuario]);
+
+  const handleGuardarEvaluacionNom036 = async (e) => {
+    e.preventDefault();
+    if (!nom036Paciente) {
+      toast.error('Selecciona un trabajador');
+      return;
+    }
+    try {
+      await api.post(`${API_URL}/nom036/evaluaciones`, {
+        paciente_id: nom036Paciente.id,
+        ...nom036Form,
+        peso_carga_kg: Number(nom036Form.peso_carga_kg),
+        frecuencia_por_hora: Number(nom036Form.frecuencia_por_hora),
+        distancia_transporte_m: Number(nom036Form.distancia_transporte_m),
+        duracion_jornada_horas: Number(nom036Form.duracion_jornada_horas),
+      });
+      toast.success('Evaluación registrada correctamente');
+      setNom036Paciente(null);
+      setNom036Form({ fecha: new Date().toISOString().split('T')[0], puesto: '', peso_carga_kg: '', frecuencia_por_hora: '', distancia_transporte_m: '', postura: 'neutra', duracion_jornada_horas: '', trabajador_vulnerable: false, observaciones: '' });
+      cargarNom036Evaluaciones();
+    } catch (error) {
+      toast.error('Error al registrar la evaluación');
+    }
+  };
+
+  useEffect(() => {
+    if (!nom036HistorialPaciente) {
+      setNom036Historial([]);
+      return;
+    }
+    api.get(`${API_URL}/nom036/evaluaciones/${nom036HistorialPaciente.id}`)
+      .then((response) => setNom036Historial(response.data))
+      .catch(() => setNom036Historial([]));
+  }, [nom036HistorialPaciente]);
+
+  const cargarNom036PlanAccion = async () => {
+    try {
+      const response = await api.get(`${API_URL}/nom036/plan-accion`);
+      setNom036PlanAccion(response.data);
+    } catch (error) {
+      console.error('Error al cargar el plan de acción NOM-036:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (subVistaConsultas === 'nom036' && nom036SubVista === 'plan_accion' && usuario) {
+      cargarNom036PlanAccion();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subVistaConsultas, nom036SubVista, usuario]);
+
+  const handleGuardarPlanAccionNom036 = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post(`${API_URL}/nom036/plan-accion`, {
+        ...nom036PlanForm,
+        evaluacion_id: nom036PlanForm.evaluacion_id || null,
+      });
+      toast.success('Acción registrada correctamente');
+      setNom036PlanForm({ evaluacion_id: '', accion: '', responsable: '', fecha_compromiso: '' });
+      cargarNom036PlanAccion();
+    } catch (error) {
+      toast.error('Error al registrar la acción');
+    }
+  };
+
+  const handleActualizarEstatusPlanNom036 = async (id, estatus) => {
+    try {
+      await api.patch(`${API_URL}/nom036/plan-accion/${id}`, { estatus });
+      cargarNom036PlanAccion();
+    } catch (error) {
+      toast.error('Error al actualizar la acción');
+    }
+  };
+
   // ===== MI AGENDA =====
   const cargarAgenda = async () => {
     if (!usuario) return;
@@ -2981,6 +3093,7 @@ function App() {
             { id: 'accidentes', label: 'Accidentes' },
             { id: 'alto_riesgo', label: 'Alto Riesgo' },
             { id: 'nom035', label: 'NOM-035' },
+            { id: 'nom036', label: 'NOM-036' },
           ].map(item => (
             <button
               key={item.id}
@@ -4114,6 +4227,259 @@ function App() {
                       <select
                         value={p.estatus}
                         onChange={(e) => handleActualizarEstatusPlan(p.id, e.target.value)}
+                        style={{ ...styles.cardInput, width: 'auto' }}
+                      >
+                        <option value="pendiente">Pendiente</option>
+                        <option value="en_proceso">En proceso</option>
+                        <option value="completado">Completado</option>
+                      </select>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        )}
+        </>
+        )}
+
+        {subVistaConsultas === 'nom036' && (
+        <>
+        <div style={{ ...styles.errorBox, marginBottom: '16px' }}>
+          Los criterios de calificación (peso, frecuencia, distancia, postura) y los rangos de
+          riesgo que ves aquí son <strong>contenido de ejemplo</strong>, no las tablas ni límites
+          oficiales de los anexos de la STPS (NOM-036-1-STPS-2018). No usar todavía para
+          acreditar cumplimiento real.
+        </div>
+        <div style={styles.subNav}>
+          {[
+            { id: 'evaluaciones', label: 'Evaluaciones' },
+            { id: 'historial', label: 'Historial' },
+            { id: 'plan_accion', label: 'Plan de Acción' },
+          ].map(item => (
+            <button
+              key={item.id}
+              onClick={() => setNom036SubVista(item.id)}
+              style={nom036SubVista === item.id ? styles.subNavButtonActive : styles.subNavButton}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {nom036SubVista === 'evaluaciones' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Nueva evaluación de manejo manual de cargas</h3>
+            </div>
+            <form onSubmit={handleGuardarEvaluacionNom036} style={styles.cardForm}>
+              <BuscadorPaciente
+                apiUrl={API_URL}
+                empresaId={usuario?.empresa_id}
+                token={usuario?.token}
+                pacienteSeleccionado={nom036Paciente}
+                onSeleccionar={setNom036Paciente}
+              />
+              <input
+                type="date"
+                value={nom036Form.fecha}
+                onChange={(e) => setNom036Form({ ...nom036Form, fecha: e.target.value })}
+                style={styles.cardInput}
+                required
+              />
+              <input
+                placeholder="Puesto"
+                value={nom036Form.puesto}
+                onChange={(e) => setNom036Form({ ...nom036Form, puesto: e.target.value })}
+                style={styles.cardInput}
+              />
+              <input
+                type="number"
+                step="0.1"
+                placeholder="Peso de la carga (kg)"
+                value={nom036Form.peso_carga_kg}
+                onChange={(e) => setNom036Form({ ...nom036Form, peso_carga_kg: e.target.value })}
+                style={styles.cardInput}
+                required
+              />
+              <input
+                type="number"
+                step="0.1"
+                placeholder="Frecuencia (levantamientos por hora)"
+                value={nom036Form.frecuencia_por_hora}
+                onChange={(e) => setNom036Form({ ...nom036Form, frecuencia_por_hora: e.target.value })}
+                style={styles.cardInput}
+                required
+              />
+              <input
+                type="number"
+                step="0.1"
+                placeholder="Distancia de transporte (m)"
+                value={nom036Form.distancia_transporte_m}
+                onChange={(e) => setNom036Form({ ...nom036Form, distancia_transporte_m: e.target.value })}
+                style={styles.cardInput}
+                required
+              />
+              <label style={styles.inlineLabel}>
+                Postura al levantar
+                <select
+                  value={nom036Form.postura}
+                  onChange={(e) => setNom036Form({ ...nom036Form, postura: e.target.value })}
+                  style={styles.cardInput}
+                >
+                  {Object.entries(ETIQUETAS_POSTURA_NOM036).map(([valor, etiqueta]) => (
+                    <option key={valor} value={valor}>{etiqueta}</option>
+                  ))}
+                </select>
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                placeholder="Duración de la jornada (horas)"
+                value={nom036Form.duracion_jornada_horas}
+                onChange={(e) => setNom036Form({ ...nom036Form, duracion_jornada_horas: e.target.value })}
+                style={styles.cardInput}
+                required
+              />
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: ink }}>
+                <input
+                  type="checkbox"
+                  checked={nom036Form.trabajador_vulnerable}
+                  onChange={(e) => setNom036Form({ ...nom036Form, trabajador_vulnerable: e.target.checked })}
+                />
+                Trabajador en condición de vulnerabilidad (embarazo, lactancia, etc.)
+              </label>
+              <textarea
+                placeholder="Observaciones"
+                value={nom036Form.observaciones}
+                onChange={(e) => setNom036Form({ ...nom036Form, observaciones: e.target.value })}
+                rows="3"
+                style={styles.cardInput}
+              />
+              <button type="submit" style={styles.saveButton}>Guardar evaluación</button>
+            </form>
+          </div>
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Evaluaciones registradas</h3>
+            </div>
+            {nom036Evaluaciones.length === 0 ? (
+              <p style={styles.emptyText}>No hay evaluaciones aún</p>
+            ) : (
+              <ul style={styles.patientList}>
+                {nom036Evaluaciones.map(ev => (
+                  <li key={ev.id} style={styles.patientItem}>
+                    <strong>{ev.paciente_nombre}</strong>
+                    <span style={styles.patientInfo}>
+                      {new Date(ev.fecha).toLocaleDateString('es-MX')} · Área: {ev.paciente_area || '—'} · Puntaje: {ev.puntaje} · {ETIQUETAS_CATEGORIA_RIESGO[ev.categoria_riesgo] || ev.categoria_riesgo}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        )}
+
+        {nom036SubVista === 'historial' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Historial de evaluaciones por trabajador</h3>
+            </div>
+            <BuscadorPaciente
+              apiUrl={API_URL}
+              empresaId={usuario?.empresa_id}
+              token={usuario?.token}
+              pacienteSeleccionado={nom036HistorialPaciente}
+              onSeleccionar={setNom036HistorialPaciente}
+            />
+            {nom036HistorialPaciente && (
+              nom036Historial.length === 0 ? (
+                <p style={styles.emptyText}>Este trabajador no tiene evaluaciones registradas</p>
+              ) : (
+                <ul style={styles.patientList}>
+                  {nom036Historial.map(h => (
+                    <li key={h.id} style={styles.patientItem}>
+                      <strong>{new Date(h.fecha).toLocaleDateString('es-MX')}</strong>
+                      <span style={styles.patientInfo}>
+                        {h.puesto ? `${h.puesto} · ` : ''}Peso: {h.peso_carga_kg}kg · Frecuencia: {h.frecuencia_por_hora}/h · Distancia: {h.distancia_transporte_m}m · Postura: {ETIQUETAS_POSTURA_NOM036[h.postura] || h.postura} · Puntaje: {h.puntaje} · {ETIQUETAS_CATEGORIA_RIESGO[h.categoria_riesgo] || h.categoria_riesgo}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )
+            )}
+          </div>
+        </div>
+        )}
+
+        {nom036SubVista === 'plan_accion' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Nueva acción</h3>
+            </div>
+            <form onSubmit={handleGuardarPlanAccionNom036} style={styles.cardForm}>
+              <label style={styles.inlineLabel}>
+                Evaluación asociada (opcional)
+                <select
+                  value={nom036PlanForm.evaluacion_id}
+                  onChange={(e) => setNom036PlanForm({ ...nom036PlanForm, evaluacion_id: e.target.value })}
+                  style={styles.cardInput}
+                >
+                  <option value="">Sin evaluación asociada</option>
+                  {nom036Evaluaciones.map(ev => (
+                    <option key={ev.id} value={ev.id}>{ev.paciente_nombre} · {new Date(ev.fecha).toLocaleDateString('es-MX')}</option>
+                  ))}
+                </select>
+              </label>
+              <textarea
+                placeholder="Acción a implementar"
+                value={nom036PlanForm.accion}
+                onChange={(e) => setNom036PlanForm({ ...nom036PlanForm, accion: e.target.value })}
+                rows="3"
+                style={styles.cardInput}
+                required
+              />
+              <input
+                placeholder="Responsable"
+                value={nom036PlanForm.responsable}
+                onChange={(e) => setNom036PlanForm({ ...nom036PlanForm, responsable: e.target.value })}
+                style={styles.cardInput}
+              />
+              <input
+                type="date"
+                placeholder="Fecha compromiso"
+                value={nom036PlanForm.fecha_compromiso}
+                onChange={(e) => setNom036PlanForm({ ...nom036PlanForm, fecha_compromiso: e.target.value })}
+                style={styles.cardInput}
+              />
+              <button type="submit" style={styles.saveButton}>Guardar acción</button>
+            </form>
+          </div>
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Plan de acción</h3>
+            </div>
+            {nom036PlanAccion.length === 0 ? (
+              <p style={styles.emptyText}>No hay acciones registradas aún</p>
+            ) : (
+              <ul style={styles.patientList}>
+                {nom036PlanAccion.map(p => (
+                  <li key={p.id} style={styles.patientItem}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div>
+                        <strong>{p.accion}</strong>
+                        <span style={styles.patientInfo}>
+                          {p.responsable ? `Responsable: ${p.responsable}` : ''} {p.fecha_compromiso ? `· Compromiso: ${new Date(p.fecha_compromiso).toLocaleDateString('es-MX')}` : ''}
+                        </span>
+                      </div>
+                      <select
+                        value={p.estatus}
+                        onChange={(e) => handleActualizarEstatusPlanNom036(p.id, e.target.value)}
                         style={{ ...styles.cardInput, width: 'auto' }}
                       >
                         <option value="pendiente">Pendiente</option>

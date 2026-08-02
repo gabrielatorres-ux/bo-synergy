@@ -1913,6 +1913,143 @@ app.patch('/api/nom035/plan-accion/:id', requireAuth, withDbClient, requireAdmin
   }
 });
 
+// ==================== NOM-036 (RIESGO ERGONÓMICO — MANEJO MANUAL DE CARGAS) ====================
+// IMPORTANTE: los criterios de calificación en calcularPuntajeNom036 y los
+// rangos en nom036_rangos_riesgo son de EJEMPLO (ver migración
+// 012_nom036.sql), no las tablas ni límites exactos de los anexos de la
+// STPS (NOM-036-1-STPS-2018). No usar para acreditar cumplimiento real
+// hasta sustituir esos criterios y validarlos con el área legal/de
+// cumplimiento.
+
+const calcularPuntajeNom036 = ({ peso_carga_kg, frecuencia_por_hora, distancia_transporte_m, postura, duracion_jornada_horas, trabajador_vulnerable }) => {
+  let puntaje = 0;
+
+  if (peso_carga_kg > 25) puntaje += 3;
+  else if (peso_carga_kg > 10) puntaje += 2;
+  else if (peso_carga_kg > 3) puntaje += 1;
+
+  if (frecuencia_por_hora > 30) puntaje += 3;
+  else if (frecuencia_por_hora > 12) puntaje += 2;
+  else if (frecuencia_por_hora > 5) puntaje += 1;
+
+  if (distancia_transporte_m > 10) puntaje += 3;
+  else if (distancia_transporte_m > 5) puntaje += 2;
+  else if (distancia_transporte_m > 1) puntaje += 1;
+
+  const puntosPostura = { neutra: 0, ligeramente_flexionada: 1, flexionada: 2, muy_flexionada_o_girada: 3 };
+  puntaje += puntosPostura[postura] ?? 0;
+
+  if (duracion_jornada_horas > 8) puntaje += 3;
+  else if (duracion_jornada_horas > 6) puntaje += 2;
+  else if (duracion_jornada_horas > 4) puntaje += 1;
+
+  if (trabajador_vulnerable) puntaje += 2;
+
+  return puntaje;
+};
+
+app.post('/api/nom036/evaluaciones', requireAuth, withDbClient, scopeEmpresaId, requirePacienteDeMiEmpresa((req) => req.body.paciente_id), async (req, res) => {
+  const { empresa_id, paciente_id, fecha, puesto, peso_carga_kg, frecuencia_por_hora, distancia_transporte_m, postura, duracion_jornada_horas, trabajador_vulnerable, observaciones } = req.body;
+  if (!paciente_id || !fecha || peso_carga_kg == null || frecuencia_por_hora == null || distancia_transporte_m == null || !postura || duracion_jornada_horas == null) {
+    return res.status(400).json({ error: 'Faltan campos requeridos' });
+  }
+  try {
+    const puntaje = calcularPuntajeNom036({ peso_carga_kg, frecuencia_por_hora, distancia_transporte_m, postura, duracion_jornada_horas, trabajador_vulnerable });
+    const rango = await req.db.queryOne(
+      'SELECT categoria_riesgo FROM nom036_rangos_riesgo WHERE $1 BETWEEN puntaje_min AND puntaje_max',
+      [puntaje]
+    );
+    const categoria_riesgo = rango ? rango.categoria_riesgo : 'muy_alto';
+    const result = await req.db.queryRun(
+      `INSERT INTO nom036_evaluaciones (empresa_id, paciente_id, fecha, puesto, peso_carga_kg, frecuencia_por_hora, distancia_transporte_m, postura, duracion_jornada_horas, trabajador_vulnerable, observaciones, puntaje, categoria_riesgo)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+      [empresa_id, paciente_id, fecha, puesto || null, peso_carga_kg, frecuencia_por_hora, distancia_transporte_m, postura, duracion_jornada_horas, !!trabajador_vulnerable, observaciones || null, puntaje, categoria_riesgo]
+    );
+    res.json({ id: result.rows[0]?.id, puntaje, categoria_riesgo, message: 'Evaluación registrada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/nom036/evaluaciones/:pacienteId', requireAuth, withDbClient, requirePacienteDeMiEmpresa((req) => req.params.pacienteId), async (req, res) => {
+  const { pacienteId } = req.params;
+  try {
+    const result = await req.db.query(
+      'SELECT * FROM nom036_evaluaciones WHERE paciente_id = $1 ORDER BY fecha DESC',
+      [pacienteId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/nom036/evaluaciones', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
+  const { empresa_id, categoria_riesgo } = req.query;
+  try {
+    const params = [empresa_id];
+    let sql = `SELECT e.*, p.nombre AS paciente_nombre, p.area AS paciente_area
+               FROM nom036_evaluaciones e
+               JOIN pacientes p ON p.id = e.paciente_id
+               WHERE e.empresa_id = $1`;
+    if (categoria_riesgo) {
+      params.push(categoria_riesgo);
+      sql += ` AND e.categoria_riesgo = $${params.length}`;
+    }
+    sql += ' ORDER BY e.fecha DESC';
+    const result = await req.db.query(sql, params);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== NOM-036: PLAN DE ACCIÓN ====================
+
+app.post('/api/nom036/plan-accion', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
+  const { empresa_id, evaluacion_id, accion, responsable, fecha_compromiso } = req.body;
+  if (!accion) {
+    return res.status(400).json({ error: 'Faltan campos requeridos' });
+  }
+  try {
+    const result = await req.db.queryRun(
+      `INSERT INTO nom036_plan_accion (empresa_id, evaluacion_id, accion, responsable, fecha_compromiso)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [empresa_id, evaluacion_id || null, accion, responsable || null, fecha_compromiso || null]
+    );
+    res.json({ id: result.rows[0]?.id, message: 'Acción registrada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/nom036/plan-accion', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
+  const { empresa_id } = req.query;
+  try {
+    const result = await req.db.query(
+      'SELECT * FROM nom036_plan_accion WHERE empresa_id = $1 ORDER BY fecha_compromiso NULLS LAST, id DESC',
+      [empresa_id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/nom036/plan-accion/:id', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
+  const { id } = req.params;
+  const { empresa_id, estatus } = req.body;
+  try {
+    await req.db.queryRun(
+      'UPDATE nom036_plan_accion SET estatus = COALESCE($1, estatus) WHERE id = $2 AND empresa_id = $3',
+      [estatus || null, id, empresa_id]
+    );
+    res.json({ message: 'Plan de acción actualizado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== INICIAR SERVIDOR ====================
 
 app.listen(PORT, () => {

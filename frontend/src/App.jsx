@@ -401,6 +401,40 @@ function App() {
     muy_flexionada_o_girada: 'Muy flexionada o girada'
   };
 
+  // ===== NOM-019 (comisión de seguridad e higiene) =====
+  // La periodicidad de reuniones y el quórum/composición formal exigidos
+  // varían según tamaño y riesgo de la empresa — periodicidad_reuniones es
+  // texto libre, no una regla que el sistema valide. Confirmar con el
+  // área legal/de cumplimiento antes de tratarla como obligatoria.
+  const [nom019SubVista, setNom019SubVista] = useState('comision');
+  const [nom019Comisiones, setNom019Comisiones] = useState([]);
+  const [nom019ComisionForm, setNom019ComisionForm] = useState({ fecha_constitucion: new Date().toISOString().split('T')[0], vigencia_hasta: '', periodicidad_reuniones: '' });
+  const [nom019ComisionSeleccionadaId, setNom019ComisionSeleccionadaId] = useState('');
+  const [nom019Integrantes, setNom019Integrantes] = useState([]);
+  const [nom019IntegrantePaciente, setNom019IntegrantePaciente] = useState(null);
+  const [nom019IntegranteForm, setNom019IntegranteForm] = useState({ nombre: '', representacion: 'trabajador', cargo: 'vocal' });
+  const [nom019Reuniones, setNom019Reuniones] = useState([]);
+  const [nom019ReunionForm, setNom019ReunionForm] = useState({ fecha: new Date().toISOString().split('T')[0], tipo: 'ordinaria', lugar: '', asistentes: '', temas: '' });
+  const [nom019ReunionParaAcuerdosId, setNom019ReunionParaAcuerdosId] = useState('');
+  const [nom019Acuerdos, setNom019Acuerdos] = useState([]);
+  const [nom019AcuerdoForm, setNom019AcuerdoForm] = useState({ descripcion: '', responsable: '', fecha_compromiso: '' });
+  const [nom019Recorridos, setNom019Recorridos] = useState([]);
+  const [nom019RecorridoForm, setNom019RecorridoForm] = useState({ fecha: new Date().toISOString().split('T')[0], area: '', hallazgos: '', responsable: '' });
+
+  const ETIQUETAS_REPRESENTACION_NOM019 = {
+    trabajador: 'Representante de los trabajadores',
+    patronal: 'Representante patronal'
+  };
+  const ETIQUETAS_CARGO_NOM019 = {
+    presidente: 'Presidente',
+    secretario: 'Secretario',
+    vocal: 'Vocal'
+  };
+  const ETIQUETAS_TIPO_REUNION_NOM019 = {
+    ordinaria: 'Ordinaria',
+    extraordinaria: 'Extraordinaria'
+  };
+
   const hoy = new Date();
   const [agendaActividades, setAgendaActividades] = useState([]);
   const [agendaMes, setAgendaMes] = useState(hoy.getMonth());
@@ -2026,6 +2060,218 @@ function App() {
     }
   };
 
+  // ===== NOM-019 (comisión de seguridad e higiene) =====
+  const cargarNom019Comisiones = async () => {
+    try {
+      const response = await api.get(`${API_URL}/nom019/comisiones`);
+      setNom019Comisiones(response.data);
+    } catch (error) {
+      console.error('Error al cargar comisiones NOM-019:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (subVistaConsultas === 'nom019' && usuario) {
+      cargarNom019Comisiones();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subVistaConsultas, usuario]);
+
+  const handleCrearComisionNom019 = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post(`${API_URL}/nom019/comisiones`, nom019ComisionForm);
+      toast.success('Comisión registrada correctamente');
+      setNom019ComisionForm({ fecha_constitucion: new Date().toISOString().split('T')[0], vigencia_hasta: '', periodicidad_reuniones: '' });
+      cargarNom019Comisiones();
+    } catch (error) {
+      toast.error('Error al registrar la comisión');
+    }
+  };
+
+  const handleActualizarEstadoComisionNom019 = async (id, estado) => {
+    try {
+      await api.patch(`${API_URL}/nom019/comisiones/${id}`, { estado });
+      cargarNom019Comisiones();
+    } catch (error) {
+      toast.error('Error al actualizar la comisión');
+    }
+  };
+
+  const cargarNom019Integrantes = async () => {
+    if (!nom019ComisionSeleccionadaId) {
+      setNom019Integrantes([]);
+      return;
+    }
+    try {
+      const response = await api.get(`${API_URL}/nom019/integrantes`, { params: { comision_id: nom019ComisionSeleccionadaId } });
+      setNom019Integrantes(response.data);
+    } catch (error) {
+      console.error('Error al cargar integrantes NOM-019:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (subVistaConsultas === 'nom019' && nom019SubVista === 'comision') {
+      cargarNom019Integrantes();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subVistaConsultas, nom019SubVista, nom019ComisionSeleccionadaId]);
+
+  const handleAgregarIntegranteNom019 = async (e) => {
+    e.preventDefault();
+    if (!nom019ComisionSeleccionadaId) {
+      toast.error('Selecciona una comisión');
+      return;
+    }
+    try {
+      await api.post(`${API_URL}/nom019/integrantes`, {
+        comision_id: nom019ComisionSeleccionadaId,
+        paciente_id: nom019IntegrantePaciente?.id || null,
+        ...nom019IntegranteForm
+      });
+      toast.success('Integrante agregado correctamente');
+      setNom019IntegrantePaciente(null);
+      setNom019IntegranteForm({ nombre: '', representacion: 'trabajador', cargo: 'vocal' });
+      cargarNom019Integrantes();
+    } catch (error) {
+      toast.error('Error al agregar al integrante');
+    }
+  };
+
+  const handleToggleIntegranteNom019 = async (id, activo) => {
+    try {
+      await api.patch(`${API_URL}/nom019/integrantes/${id}`, { activo });
+      cargarNom019Integrantes();
+    } catch (error) {
+      toast.error('Error al actualizar el integrante');
+    }
+  };
+
+  const cargarNom019Reuniones = async () => {
+    if (!nom019ComisionSeleccionadaId) {
+      setNom019Reuniones([]);
+      return;
+    }
+    try {
+      const response = await api.get(`${API_URL}/nom019/reuniones`, { params: { comision_id: nom019ComisionSeleccionadaId } });
+      setNom019Reuniones(response.data);
+    } catch (error) {
+      console.error('Error al cargar reuniones NOM-019:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (subVistaConsultas === 'nom019' && nom019SubVista === 'reuniones') {
+      cargarNom019Reuniones();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subVistaConsultas, nom019SubVista, nom019ComisionSeleccionadaId]);
+
+  const handleCrearReunionNom019 = async (e) => {
+    e.preventDefault();
+    if (!nom019ComisionSeleccionadaId) {
+      toast.error('Selecciona una comisión');
+      return;
+    }
+    try {
+      await api.post(`${API_URL}/nom019/reuniones`, {
+        comision_id: nom019ComisionSeleccionadaId,
+        ...nom019ReunionForm
+      });
+      toast.success('Reunión registrada correctamente');
+      setNom019ReunionForm({ fecha: new Date().toISOString().split('T')[0], tipo: 'ordinaria', lugar: '', asistentes: '', temas: '' });
+      cargarNom019Reuniones();
+    } catch (error) {
+      toast.error('Error al registrar la reunión');
+    }
+  };
+
+  const cargarNom019Acuerdos = async () => {
+    if (!nom019ReunionParaAcuerdosId) {
+      setNom019Acuerdos([]);
+      return;
+    }
+    try {
+      const response = await api.get(`${API_URL}/nom019/acuerdos`, { params: { reunion_id: nom019ReunionParaAcuerdosId } });
+      setNom019Acuerdos(response.data);
+    } catch (error) {
+      console.error('Error al cargar acuerdos NOM-019:', error);
+    }
+  };
+
+  useEffect(() => {
+    cargarNom019Acuerdos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nom019ReunionParaAcuerdosId]);
+
+  const handleCrearAcuerdoNom019 = async (e) => {
+    e.preventDefault();
+    if (!nom019ReunionParaAcuerdosId) {
+      toast.error('Selecciona una reunión');
+      return;
+    }
+    try {
+      await api.post(`${API_URL}/nom019/acuerdos`, {
+        reunion_id: nom019ReunionParaAcuerdosId,
+        ...nom019AcuerdoForm
+      });
+      toast.success('Acuerdo registrado correctamente');
+      setNom019AcuerdoForm({ descripcion: '', responsable: '', fecha_compromiso: '' });
+      cargarNom019Acuerdos();
+    } catch (error) {
+      toast.error('Error al registrar el acuerdo');
+    }
+  };
+
+  const handleActualizarEstatusAcuerdoNom019 = async (id, estatus) => {
+    try {
+      await api.patch(`${API_URL}/nom019/acuerdos/${id}`, { estatus });
+      cargarNom019Acuerdos();
+    } catch (error) {
+      toast.error('Error al actualizar el acuerdo');
+    }
+  };
+
+  const cargarNom019Recorridos = async () => {
+    if (!nom019ComisionSeleccionadaId) {
+      setNom019Recorridos([]);
+      return;
+    }
+    try {
+      const response = await api.get(`${API_URL}/nom019/recorridos`, { params: { comision_id: nom019ComisionSeleccionadaId } });
+      setNom019Recorridos(response.data);
+    } catch (error) {
+      console.error('Error al cargar recorridos NOM-019:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (subVistaConsultas === 'nom019' && nom019SubVista === 'recorridos') {
+      cargarNom019Recorridos();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subVistaConsultas, nom019SubVista, nom019ComisionSeleccionadaId]);
+
+  const handleCrearRecorridoNom019 = async (e) => {
+    e.preventDefault();
+    if (!nom019ComisionSeleccionadaId) {
+      toast.error('Selecciona una comisión');
+      return;
+    }
+    try {
+      await api.post(`${API_URL}/nom019/recorridos`, {
+        comision_id: nom019ComisionSeleccionadaId,
+        ...nom019RecorridoForm
+      });
+      toast.success('Recorrido registrado correctamente');
+      setNom019RecorridoForm({ fecha: new Date().toISOString().split('T')[0], area: '', hallazgos: '', responsable: '' });
+      cargarNom019Recorridos();
+    } catch (error) {
+      toast.error('Error al registrar el recorrido');
+    }
+  };
+
   // ===== MI AGENDA =====
   const cargarAgenda = async () => {
     if (!usuario) return;
@@ -3094,6 +3340,7 @@ function App() {
             { id: 'alto_riesgo', label: 'Alto Riesgo' },
             { id: 'nom035', label: 'NOM-035' },
             { id: 'nom036', label: 'NOM-036' },
+            { id: 'nom019', label: 'NOM-019' },
           ].map(item => (
             <button
               key={item.id}
@@ -4487,6 +4734,407 @@ function App() {
                         <option value="completado">Completado</option>
                       </select>
                     </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        )}
+        </>
+        )}
+
+        {subVistaConsultas === 'nom019' && (
+        <>
+        <div style={{ ...styles.errorBox, marginBottom: '16px' }}>
+          La periodicidad de reuniones y el quórum/composición formal exigidos por la
+          NOM-019 varían según tamaño y riesgo de la empresa. Confírmalos con el área
+          legal/de cumplimiento — aquí quedan como campos libres, no como reglas forzadas.
+        </div>
+        <div style={styles.subNav}>
+          {[
+            { id: 'comision', label: 'Comisión' },
+            { id: 'reuniones', label: 'Reuniones y Acuerdos' },
+            { id: 'recorridos', label: 'Recorridos' },
+          ].map(item => (
+            <button
+              key={item.id}
+              onClick={() => setNom019SubVista(item.id)}
+              style={nom019SubVista === item.id ? styles.subNavButtonActive : styles.subNavButton}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ margin: '8px 0 16px' }}>
+          <label style={styles.inlineLabel}>
+            Comisión activa
+            <select
+              value={nom019ComisionSeleccionadaId}
+              onChange={(e) => setNom019ComisionSeleccionadaId(e.target.value)}
+              style={styles.cardInput}
+            >
+              <option value="">Selecciona una comisión</option>
+              {nom019Comisiones.map(c => (
+                <option key={c.id} value={c.id}>
+                  Constituida {new Date(c.fecha_constitucion).toLocaleDateString('es-MX')} · {c.estado}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {nom019SubVista === 'comision' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Constituir comisión</h3>
+            </div>
+            <form onSubmit={handleCrearComisionNom019} style={styles.cardForm}>
+              <label style={styles.inlineLabel}>
+                Fecha de constitución
+                <input
+                  type="date"
+                  value={nom019ComisionForm.fecha_constitucion}
+                  onChange={(e) => setNom019ComisionForm({ ...nom019ComisionForm, fecha_constitucion: e.target.value })}
+                  style={styles.cardInput}
+                  required
+                />
+              </label>
+              <label style={styles.inlineLabel}>
+                Vigencia hasta (opcional)
+                <input
+                  type="date"
+                  value={nom019ComisionForm.vigencia_hasta}
+                  onChange={(e) => setNom019ComisionForm({ ...nom019ComisionForm, vigencia_hasta: e.target.value })}
+                  style={styles.cardInput}
+                />
+              </label>
+              <input
+                placeholder="Periodicidad de reuniones (ej. mensual)"
+                value={nom019ComisionForm.periodicidad_reuniones}
+                onChange={(e) => setNom019ComisionForm({ ...nom019ComisionForm, periodicidad_reuniones: e.target.value })}
+                style={styles.cardInput}
+              />
+              <button type="submit" style={styles.saveButton}>Registrar comisión</button>
+            </form>
+          </div>
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Comisiones registradas</h3>
+            </div>
+            {nom019Comisiones.length === 0 ? (
+              <p style={styles.emptyText}>No hay comisiones registradas aún</p>
+            ) : (
+              <ul style={styles.patientList}>
+                {nom019Comisiones.map(c => (
+                  <li key={c.id} style={styles.patientItem}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div>
+                        <strong>Constituida {new Date(c.fecha_constitucion).toLocaleDateString('es-MX')}</strong>
+                        <span style={styles.patientInfo}>
+                          {c.vigencia_hasta ? `Vigencia hasta: ${new Date(c.vigencia_hasta).toLocaleDateString('es-MX')} · ` : ''}
+                          {c.periodicidad_reuniones ? `Periodicidad: ${c.periodicidad_reuniones} · ` : ''}
+                          Estado: {c.estado}
+                        </span>
+                      </div>
+                      {c.estado === 'activa' && (
+                        <button onClick={() => handleActualizarEstadoComisionNom019(c.id, 'disuelta')} style={styles.deleteButton}>Disolver</button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div style={{ marginTop: '20px', borderTop: '1px solid #EEEEEE', paddingTop: '16px' }}>
+              <h4 style={{ fontFamily: fontDisplay, fontSize: '15px', color: ink, marginBottom: '8px' }}>Integrantes</h4>
+              {!nom019ComisionSeleccionadaId ? (
+                <p style={styles.emptyText}>Selecciona una comisión activa para gestionar sus integrantes.</p>
+              ) : (
+                <>
+                  <form onSubmit={handleAgregarIntegranteNom019} style={styles.cardForm}>
+                    <BuscadorPaciente
+                      apiUrl={API_URL}
+                      empresaId={usuario?.empresa_id}
+                      token={usuario?.token}
+                      label="Vincular a expediente (opcional)"
+                      pacienteSeleccionado={nom019IntegrantePaciente}
+                      onSeleccionar={(p) => {
+                        setNom019IntegrantePaciente(p);
+                        if (p) setNom019IntegranteForm({ ...nom019IntegranteForm, nombre: p.nombre });
+                      }}
+                    />
+                    <input
+                      placeholder="Nombre completo"
+                      value={nom019IntegranteForm.nombre}
+                      onChange={(e) => setNom019IntegranteForm({ ...nom019IntegranteForm, nombre: e.target.value })}
+                      style={styles.cardInput}
+                      required
+                    />
+                    <label style={styles.inlineLabel}>
+                      Representación
+                      <select
+                        value={nom019IntegranteForm.representacion}
+                        onChange={(e) => setNom019IntegranteForm({ ...nom019IntegranteForm, representacion: e.target.value })}
+                        style={styles.cardInput}
+                      >
+                        {Object.entries(ETIQUETAS_REPRESENTACION_NOM019).map(([valor, etiqueta]) => (
+                          <option key={valor} value={valor}>{etiqueta}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={styles.inlineLabel}>
+                      Cargo
+                      <select
+                        value={nom019IntegranteForm.cargo}
+                        onChange={(e) => setNom019IntegranteForm({ ...nom019IntegranteForm, cargo: e.target.value })}
+                        style={styles.cardInput}
+                      >
+                        {Object.entries(ETIQUETAS_CARGO_NOM019).map(([valor, etiqueta]) => (
+                          <option key={valor} value={valor}>{etiqueta}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <button type="submit" style={styles.saveButton}>Agregar integrante</button>
+                  </form>
+
+                  {nom019Integrantes.length === 0 ? (
+                    <p style={styles.emptyText}>No hay integrantes registrados aún</p>
+                  ) : (
+                    <ul style={styles.patientList}>
+                      {nom019Integrantes.map(i => (
+                        <li key={i.id} style={styles.patientItem}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                            <div>
+                              <strong>{i.nombre}</strong>
+                              <span style={styles.patientInfo}>
+                                {ETIQUETAS_CARGO_NOM019[i.cargo]} · {ETIQUETAS_REPRESENTACION_NOM019[i.representacion]} · {i.activo ? 'Activo' : 'Inactivo'}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => handleToggleIntegranteNom019(i.id, !i.activo)}
+                              style={styles.deleteButton}
+                            >
+                              {i.activo ? 'Dar de baja' : 'Reactivar'}
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+        )}
+
+        {nom019SubVista === 'reuniones' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Nueva reunión</h3>
+            </div>
+            {!nom019ComisionSeleccionadaId ? (
+              <p style={styles.emptyText}>Selecciona una comisión activa arriba para registrar reuniones.</p>
+            ) : (
+              <form onSubmit={handleCrearReunionNom019} style={styles.cardForm}>
+                <input
+                  type="date"
+                  value={nom019ReunionForm.fecha}
+                  onChange={(e) => setNom019ReunionForm({ ...nom019ReunionForm, fecha: e.target.value })}
+                  style={styles.cardInput}
+                  required
+                />
+                <label style={styles.inlineLabel}>
+                  Tipo
+                  <select
+                    value={nom019ReunionForm.tipo}
+                    onChange={(e) => setNom019ReunionForm({ ...nom019ReunionForm, tipo: e.target.value })}
+                    style={styles.cardInput}
+                  >
+                    {Object.entries(ETIQUETAS_TIPO_REUNION_NOM019).map(([valor, etiqueta]) => (
+                      <option key={valor} value={valor}>{etiqueta}</option>
+                    ))}
+                  </select>
+                </label>
+                <input
+                  placeholder="Lugar"
+                  value={nom019ReunionForm.lugar}
+                  onChange={(e) => setNom019ReunionForm({ ...nom019ReunionForm, lugar: e.target.value })}
+                  style={styles.cardInput}
+                />
+                <textarea
+                  placeholder="Asistentes"
+                  value={nom019ReunionForm.asistentes}
+                  onChange={(e) => setNom019ReunionForm({ ...nom019ReunionForm, asistentes: e.target.value })}
+                  rows="2"
+                  style={styles.cardInput}
+                />
+                <textarea
+                  placeholder="Temas tratados"
+                  value={nom019ReunionForm.temas}
+                  onChange={(e) => setNom019ReunionForm({ ...nom019ReunionForm, temas: e.target.value })}
+                  rows="3"
+                  style={styles.cardInput}
+                />
+                <button type="submit" style={styles.saveButton}>Guardar reunión</button>
+              </form>
+            )}
+          </div>
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Reuniones registradas</h3>
+            </div>
+            {nom019Reuniones.length === 0 ? (
+              <p style={styles.emptyText}>No hay reuniones registradas aún</p>
+            ) : (
+              <ul style={styles.patientList}>
+                {nom019Reuniones.map(r => (
+                  <li key={r.id} style={styles.patientItem}>
+                    <strong>{new Date(r.fecha).toLocaleDateString('es-MX')}</strong>
+                    <span style={styles.patientInfo}>
+                      {ETIQUETAS_TIPO_REUNION_NOM019[r.tipo]} {r.lugar ? `· ${r.lugar}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div style={{ marginTop: '20px', borderTop: '1px solid #EEEEEE', paddingTop: '16px' }}>
+              <h4 style={{ fontFamily: fontDisplay, fontSize: '15px', color: ink, marginBottom: '8px' }}>Acuerdos</h4>
+              <label style={styles.inlineLabel}>
+                Reunión
+                <select
+                  value={nom019ReunionParaAcuerdosId}
+                  onChange={(e) => setNom019ReunionParaAcuerdosId(e.target.value)}
+                  style={styles.cardInput}
+                >
+                  <option value="">Selecciona una reunión</option>
+                  {nom019Reuniones.map(r => (
+                    <option key={r.id} value={r.id}>{new Date(r.fecha).toLocaleDateString('es-MX')} · {ETIQUETAS_TIPO_REUNION_NOM019[r.tipo]}</option>
+                  ))}
+                </select>
+              </label>
+
+              {nom019ReunionParaAcuerdosId && (
+                <>
+                  <form onSubmit={handleCrearAcuerdoNom019} style={styles.cardForm}>
+                    <textarea
+                      placeholder="Descripción del acuerdo"
+                      value={nom019AcuerdoForm.descripcion}
+                      onChange={(e) => setNom019AcuerdoForm({ ...nom019AcuerdoForm, descripcion: e.target.value })}
+                      rows="2"
+                      style={styles.cardInput}
+                      required
+                    />
+                    <input
+                      placeholder="Responsable"
+                      value={nom019AcuerdoForm.responsable}
+                      onChange={(e) => setNom019AcuerdoForm({ ...nom019AcuerdoForm, responsable: e.target.value })}
+                      style={styles.cardInput}
+                    />
+                    <input
+                      type="date"
+                      placeholder="Fecha compromiso"
+                      value={nom019AcuerdoForm.fecha_compromiso}
+                      onChange={(e) => setNom019AcuerdoForm({ ...nom019AcuerdoForm, fecha_compromiso: e.target.value })}
+                      style={styles.cardInput}
+                    />
+                    <button type="submit" style={styles.saveButton}>Guardar acuerdo</button>
+                  </form>
+
+                  {nom019Acuerdos.length === 0 ? (
+                    <p style={styles.emptyText}>No hay acuerdos registrados para esta reunión</p>
+                  ) : (
+                    <ul style={styles.patientList}>
+                      {nom019Acuerdos.map(a => (
+                        <li key={a.id} style={styles.patientItem}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                            <div>
+                              <strong>{a.descripcion}</strong>
+                              <span style={styles.patientInfo}>
+                                {a.responsable ? `Responsable: ${a.responsable}` : ''} {a.fecha_compromiso ? `· Compromiso: ${new Date(a.fecha_compromiso).toLocaleDateString('es-MX')}` : ''}
+                              </span>
+                            </div>
+                            <select
+                              value={a.estatus}
+                              onChange={(e) => handleActualizarEstatusAcuerdoNom019(a.id, e.target.value)}
+                              style={{ ...styles.cardInput, width: 'auto' }}
+                            >
+                              <option value="pendiente">Pendiente</option>
+                              <option value="en_proceso">En proceso</option>
+                              <option value="completado">Completado</option>
+                            </select>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+        )}
+
+        {nom019SubVista === 'recorridos' && (
+        <div style={styles.mainGrid}>
+          <div style={styles.formCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Nuevo recorrido de verificación</h3>
+            </div>
+            {!nom019ComisionSeleccionadaId ? (
+              <p style={styles.emptyText}>Selecciona una comisión activa arriba para registrar recorridos.</p>
+            ) : (
+              <form onSubmit={handleCrearRecorridoNom019} style={styles.cardForm}>
+                <input
+                  type="date"
+                  value={nom019RecorridoForm.fecha}
+                  onChange={(e) => setNom019RecorridoForm({ ...nom019RecorridoForm, fecha: e.target.value })}
+                  style={styles.cardInput}
+                  required
+                />
+                <input
+                  placeholder="Área recorrida"
+                  value={nom019RecorridoForm.area}
+                  onChange={(e) => setNom019RecorridoForm({ ...nom019RecorridoForm, area: e.target.value })}
+                  style={styles.cardInput}
+                  required
+                />
+                <textarea
+                  placeholder="Hallazgos"
+                  value={nom019RecorridoForm.hallazgos}
+                  onChange={(e) => setNom019RecorridoForm({ ...nom019RecorridoForm, hallazgos: e.target.value })}
+                  rows="3"
+                  style={styles.cardInput}
+                />
+                <input
+                  placeholder="Responsable"
+                  value={nom019RecorridoForm.responsable}
+                  onChange={(e) => setNom019RecorridoForm({ ...nom019RecorridoForm, responsable: e.target.value })}
+                  style={styles.cardInput}
+                />
+                <button type="submit" style={styles.saveButton}>Guardar recorrido</button>
+              </form>
+            )}
+          </div>
+          <div style={styles.listCard}>
+            <div style={styles.cardHeader}>
+              <h3 style={styles.cardTitle}>Recorridos registrados</h3>
+            </div>
+            {nom019Recorridos.length === 0 ? (
+              <p style={styles.emptyText}>No hay recorridos registrados aún</p>
+            ) : (
+              <ul style={styles.patientList}>
+                {nom019Recorridos.map(r => (
+                  <li key={r.id} style={styles.patientItem}>
+                    <strong>{new Date(r.fecha).toLocaleDateString('es-MX')} · {r.area}</strong>
+                    <span style={styles.patientInfo}>
+                      {r.hallazgos ? `${r.hallazgos} · ` : ''}{r.responsable ? `Responsable: ${r.responsable}` : ''}
+                    </span>
                   </li>
                 ))}
               </ul>

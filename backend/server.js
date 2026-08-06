@@ -2050,6 +2050,226 @@ app.patch('/api/nom036/plan-accion/:id', requireAuth, withDbClient, requireAdmin
   }
 });
 
+// ==================== NOM-019 (COMISIÓN DE SEGURIDAD E HIGIENE) ====================
+// IMPORTANTE: la periodicidad de reuniones y el quórum/composición
+// formalmente exigidos por la NOM-019-STPS-2011 varían según tamaño y
+// nivel de riesgo de la empresa. Aquí quedan como campos libres
+// (periodicidad_reuniones es texto, no una regla forzada) — deben
+// confirmarse con el área legal/de cumplimiento antes de tratarse como
+// obligatorios.
+
+app.get('/api/nom019/comisiones', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
+  try {
+    const { empresa_id } = req.query;
+    const result = await req.db.query(
+      'SELECT * FROM nom019_comisiones WHERE empresa_id = $1 ORDER BY fecha_constitucion DESC',
+      [empresa_id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/nom019/comisiones', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
+  const { empresa_id, fecha_constitucion, vigencia_hasta, periodicidad_reuniones } = req.body;
+  if (!fecha_constitucion) {
+    return res.status(400).json({ error: 'Faltan campos requeridos' });
+  }
+  try {
+    const result = await req.db.queryRun(
+      `INSERT INTO nom019_comisiones (empresa_id, fecha_constitucion, vigencia_hasta, periodicidad_reuniones)
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [empresa_id, fecha_constitucion, vigencia_hasta || null, periodicidad_reuniones || null]
+    );
+    res.json({ id: result.rows[0]?.id, message: 'Comisión registrada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/nom019/comisiones/:id', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
+  const { id } = req.params;
+  const { empresa_id, estado, vigencia_hasta } = req.body;
+  try {
+    await req.db.queryRun(
+      'UPDATE nom019_comisiones SET estado = COALESCE($1, estado), vigencia_hasta = COALESCE($2, vigencia_hasta) WHERE id = $3 AND empresa_id = $4',
+      [estado || null, vigencia_hasta || null, id, empresa_id]
+    );
+    res.json({ message: 'Comisión actualizada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/nom019/integrantes', requireAuth, withDbClient, async (req, res) => {
+  const { comision_id } = req.query;
+  if (!comision_id) {
+    return res.status(400).json({ error: 'Se requiere comision_id' });
+  }
+  try {
+    const result = await req.db.query(
+      'SELECT * FROM nom019_integrantes WHERE comision_id = $1 ORDER BY representacion, cargo',
+      [comision_id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/nom019/integrantes', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
+  const { empresa_id, comision_id, paciente_id, nombre, representacion, cargo } = req.body;
+  if (!comision_id || !nombre || !representacion || !cargo) {
+    return res.status(400).json({ error: 'Faltan campos requeridos' });
+  }
+  try {
+    const result = await req.db.queryRun(
+      `INSERT INTO nom019_integrantes (comision_id, empresa_id, paciente_id, nombre, representacion, cargo)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [comision_id, empresa_id, paciente_id || null, nombre, representacion, cargo]
+    );
+    res.json({ id: result.rows[0]?.id, message: 'Integrante agregado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/nom019/integrantes/:id', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
+  const { id } = req.params;
+  const { empresa_id, activo } = req.body;
+  try {
+    await req.db.queryRun(
+      'UPDATE nom019_integrantes SET activo = COALESCE($1, activo) WHERE id = $2 AND empresa_id = $3',
+      [activo === undefined ? null : activo, id, empresa_id]
+    );
+    res.json({ message: 'Integrante actualizado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== NOM-019: REUNIONES Y ACUERDOS ====================
+
+app.get('/api/nom019/reuniones', requireAuth, withDbClient, async (req, res) => {
+  const { comision_id } = req.query;
+  if (!comision_id) {
+    return res.status(400).json({ error: 'Se requiere comision_id' });
+  }
+  try {
+    const result = await req.db.query(
+      'SELECT * FROM nom019_reuniones WHERE comision_id = $1 ORDER BY fecha DESC',
+      [comision_id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/nom019/reuniones', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
+  const { empresa_id, comision_id, fecha, tipo, lugar, asistentes, temas } = req.body;
+  if (!comision_id || !fecha) {
+    return res.status(400).json({ error: 'Faltan campos requeridos' });
+  }
+  try {
+    const result = await req.db.queryRun(
+      `INSERT INTO nom019_reuniones (comision_id, empresa_id, fecha, tipo, lugar, asistentes, temas, creada_por)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+      [comision_id, empresa_id, fecha, tipo || 'ordinaria', lugar || null, asistentes || null, temas || null, req.auth.id]
+    );
+    res.json({ id: result.rows[0]?.id, message: 'Reunión registrada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/nom019/acuerdos', requireAuth, withDbClient, scopeEmpresaId, async (req, res) => {
+  const { empresa_id, reunion_id } = req.query;
+  try {
+    const params = [empresa_id];
+    let sql = `SELECT a.*, r.fecha AS reunion_fecha
+               FROM nom019_acuerdos a
+               JOIN nom019_reuniones r ON r.id = a.reunion_id
+               WHERE a.empresa_id = $1`;
+    if (reunion_id) {
+      params.push(reunion_id);
+      sql += ` AND a.reunion_id = $${params.length}`;
+    }
+    sql += ' ORDER BY a.fecha_compromiso NULLS LAST, a.id DESC';
+    const result = await req.db.query(sql, params);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/nom019/acuerdos', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
+  const { empresa_id, reunion_id, descripcion, responsable, fecha_compromiso } = req.body;
+  if (!reunion_id || !descripcion) {
+    return res.status(400).json({ error: 'Faltan campos requeridos' });
+  }
+  try {
+    const result = await req.db.queryRun(
+      `INSERT INTO nom019_acuerdos (reunion_id, empresa_id, descripcion, responsable, fecha_compromiso)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [reunion_id, empresa_id, descripcion, responsable || null, fecha_compromiso || null]
+    );
+    res.json({ id: result.rows[0]?.id, message: 'Acuerdo registrado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/nom019/acuerdos/:id', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
+  const { id } = req.params;
+  const { empresa_id, estatus } = req.body;
+  try {
+    await req.db.queryRun(
+      'UPDATE nom019_acuerdos SET estatus = COALESCE($1, estatus) WHERE id = $2 AND empresa_id = $3',
+      [estatus || null, id, empresa_id]
+    );
+    res.json({ message: 'Acuerdo actualizado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== NOM-019: RECORRIDOS DE VERIFICACIÓN ====================
+
+app.get('/api/nom019/recorridos', requireAuth, withDbClient, async (req, res) => {
+  const { comision_id } = req.query;
+  if (!comision_id) {
+    return res.status(400).json({ error: 'Se requiere comision_id' });
+  }
+  try {
+    const result = await req.db.query(
+      'SELECT * FROM nom019_recorridos WHERE comision_id = $1 ORDER BY fecha DESC',
+      [comision_id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/nom019/recorridos', requireAuth, withDbClient, requireAdmin, scopeEmpresaId, async (req, res) => {
+  const { empresa_id, comision_id, fecha, area, hallazgos, responsable } = req.body;
+  if (!comision_id || !fecha || !area) {
+    return res.status(400).json({ error: 'Faltan campos requeridos' });
+  }
+  try {
+    const result = await req.db.queryRun(
+      `INSERT INTO nom019_recorridos (comision_id, empresa_id, fecha, area, hallazgos, responsable)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [comision_id, empresa_id, fecha, area, hallazgos || null, responsable || null]
+    );
+    res.json({ id: result.rows[0]?.id, message: 'Recorrido registrado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== INICIAR SERVIDOR ====================
 
 app.listen(PORT, () => {
